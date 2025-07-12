@@ -128,7 +128,10 @@ function Player:shoot(angle, bulletManager)
             -- Rapid fire
             bulletManager:addPlayerBullet(spawnX, spawnY, angle, 600, 12)
         end
+        
+        return true -- Successfully shot
     end
+    return false -- Couldn't shoot (cooldown)
 end
 
 function Player:takeDamage(damage)

@@ -10,6 +10,9 @@ A fast-paced bullet hell game built with LÖVE2D (Lua) featuring sci-fi themes, 
   - **Fighter**: Medium speed, strafing behavior, spread shots
   - **Bomber**: Slow, heavy, powerful shots
 - **Weapon System**: Mouse-aimed shooting with visual effects
+- **Audio System**: Procedural music and sound effects
+  - **Background Music**: Ambient sci-fi soundtrack with looping
+  - **Sound Effects**: Laser shots, explosions, and impact sounds
 - **Particle Effects**: Explosions, thrust trails, and bullet glows
 - **Progressive Difficulty**: Faster spawning and stronger enemies over time
 - **Sci-Fi Aesthetics**: Starfield background, glowing effects, geometric ships
@@ -20,7 +23,9 @@ A fast-paced bullet hell game built with LÖVE2D (Lua) featuring sci-fi themes, 
 - **Mouse / Spacebar**: Shoot towards mouse cursor (manual mode)
 - **Q / E**: Rotate ship and camera left/right
 - **G**: Toggle auto-shooting mode on/off
-- **P**: Pause game
+- **M**: Toggle background music on/off
+- **N**: Toggle sound effects on/off
+- **P**: Pause game (pauses music)
 - **R**: Reset ship rotation / Restart (when game over)
 - **Escape**: Quit
 

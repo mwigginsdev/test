@@ -4,6 +4,7 @@ local Player = require('src.player')
 local BulletManager = require('src.bullet_manager')
 local EnemyManager = require('src.enemy_manager')
 local ParticleManager = require('src.particle_manager')
+local AudioManager = require('src.audio_manager')
 
 local Game = {}
 
@@ -16,6 +17,7 @@ function Game:init()
     self.bulletManager = BulletManager:new()
     self.enemyManager = EnemyManager:new(self.width, self.height)
     self.particleManager = ParticleManager:new()
+    self.audioManager = AudioManager:new()
     
     -- Game state
     self.score = 0
@@ -37,6 +39,9 @@ function Game:init()
     
     -- Background stars
     self:generateStars()
+    
+    -- Start background music
+    self.audioManager:startMusic()
     
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
@@ -107,7 +112,10 @@ function Game:update(dt)
         local worldMouseY = self.player.y + (relativeMouseX * math.sin(-self.camera.rotation) + relativeMouseY * math.cos(-self.camera.rotation))
         
         local angle = math.atan2(worldMouseY - self.player.y, worldMouseX - self.player.x)
-        self.player:shoot(angle, self.bulletManager)
+        local didShoot = self.player:shoot(angle, self.bulletManager)
+        if didShoot then
+            self.audioManager:playSound("shoot")
+        end
     end
     
     -- Check collisions
@@ -125,10 +133,12 @@ function Game:checkCollisions()
                 enemy:takeDamage(bullet.damage)
                 bullet.active = false
                 self.particleManager:createExplosion(enemy.x, enemy.y, {0.9, 0.3, 0.1})
+                self.audioManager:playSound("hit")
                 
                 if enemy.health <= 0 then
                     self.score = self.score + enemy.points
                     self.particleManager:createExplosion(enemy.x, enemy.y, {1, 0.5, 0})
+                    self.audioManager:playSound("explosion")
                 end
             end
         end
@@ -140,9 +150,11 @@ function Game:checkCollisions()
             self.player:takeDamage(bullet.damage)
             bullet.active = false
             self.particleManager:createExplosion(self.player.x, self.player.y, {0.1, 0.5, 0.9})
+            self.audioManager:playSound("hit")
             
             if self.player.health <= 0 then
                 self.gameOver = true
+                self.audioManager:stopMusic()
             end
         end
     end
@@ -153,9 +165,11 @@ function Game:checkCollisions()
             self.player:takeDamage(10)
             enemy.health = 0
             self.particleManager:createExplosion(self.player.x, self.player.y, {1, 0, 0})
+            self.audioManager:playSound("explosion")
             
             if self.player.health <= 0 then
                 self.gameOver = true
+                self.audioManager:stopMusic()
             end
         end
     end
@@ -219,6 +233,13 @@ function Game:drawUI()
     local rotationDegrees = math.floor(math.deg(self.player.rotation) % 360)
     love.graphics.print("FACING: " .. rotationDegrees .. "°", 10, 130, 0, 1.2, 1.2)
     
+    -- Audio status indicators
+    love.graphics.setColor(self.audioManager.musicEnabled and {0, 1, 0} or {0.5, 0.5, 0.5})
+    love.graphics.print("MUSIC: " .. (self.audioManager.musicEnabled and "ON" or "OFF"), 10, 160, 0, 1, 1)
+    
+    love.graphics.setColor(self.audioManager.sfxEnabled and {0, 1, 0} or {0.5, 0.5, 0.5})
+    love.graphics.print("SFX: " .. (self.audioManager.sfxEnabled and "ON" or "OFF"), 10, 180, 0, 1, 1)
+    
     -- Health bar
     love.graphics.setColor(0.2, 0.2, 0.2)
     love.graphics.rectangle('fill', 10, 70, 200, 20)
@@ -254,9 +275,20 @@ function Game:keypressed(key)
         love.event.quit()
     elseif key == 'p' then
         self.paused = not self.paused
+        if self.paused then
+            self.audioManager:pauseMusic()
+        else
+            self.audioManager:resumeMusic()
+        end
     elseif key == 'g' then
         self.autoShoot = not self.autoShoot
         print("Auto-shoot " .. (self.autoShoot and "ENABLED" or "DISABLED"))
+    elseif key == 'm' then
+        local musicEnabled = self.audioManager:toggleMusic()
+        print("Music " .. (musicEnabled and "ENABLED" or "DISABLED"))
+    elseif key == 'n' then
+        local sfxEnabled = self.audioManager:toggleSfx()
+        print("Sound effects " .. (sfxEnabled and "ENABLED" or "DISABLED"))
     elseif key == 'r' then
         if self.gameOver then
             self:init() -- Restart game
