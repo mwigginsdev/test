@@ -5,6 +5,7 @@ local BulletManager = require('src.bullet_manager')
 local EnemyManager = require('src.enemy_manager')
 local ParticleManager = require('src.particle_manager')
 local AudioManager = require('src.audio_manager')
+local SpaceStation = require('src.space_station')
 
 local Game = {}
 
@@ -18,6 +19,10 @@ function Game:init()
     self.enemyManager = EnemyManager:new(self.width, self.height)
     self.particleManager = ParticleManager:new()
     self.audioManager = AudioManager:new()
+    
+    -- Initialize space stations
+    self.spaceStations = {}
+    self:generateSpaceStations()
     
     -- Game state
     self.score = 0
@@ -58,6 +63,26 @@ function Game:generateStars()
     end
 end
 
+function Game:generateSpaceStations()
+    local stationTypes = {"research", "military", "trading", "mining"}
+    local numStations = 3
+    
+    for i = 1, numStations do
+        local stationType = stationTypes[math.random(1, #stationTypes)]
+        
+        -- Position stations around the game world
+        local angle = (i / numStations) * 2 * math.pi
+        local distance = 800 + math.random(-200, 200)
+        local x = self.width / 2 + math.cos(angle) * distance
+        local y = self.height / 2 + math.sin(angle) * distance
+        
+        local station = SpaceStation:new(x, y, stationType)
+        table.insert(self.spaceStations, station)
+    end
+    
+    print("Generated " .. numStations .. " space stations")
+end
+
 function Game:update(dt)
     if self.gameOver or self.paused then
         return
@@ -90,6 +115,11 @@ function Game:update(dt)
     self.bulletManager:update(dt, self.player)
     self.enemyManager:update(dt, self.player, self.bulletManager)
     self.particleManager:update(dt)
+    
+    -- Update space stations
+    for _, station in ipairs(self.spaceStations) do
+        station:update(dt, self.player)
+    end
     
     -- Handle player shooting
     local shouldShoot = false
@@ -173,6 +203,18 @@ function Game:checkCollisions()
             end
         end
     end
+    
+    -- Bullets vs space stations (they can be damaged)
+    for _, bullet in ipairs(self.bulletManager.enemyBullets) do
+        for _, station in ipairs(self.spaceStations) do
+            if self:checkCollision(bullet, station) then
+                station:takeDamage(bullet.damage)
+                bullet.active = false
+                self.particleManager:createExplosion(station.x, station.y, {0.2, 0.8, 1.0})
+                self.audioManager:playSound("hit")
+            end
+        end
+    end
 end
 
 function Game:checkCollision(obj1, obj2)
@@ -203,6 +245,11 @@ function Game:draw()
     self.bulletManager:draw()
     self.enemyManager:draw()
     self.particleManager:draw()
+    
+    -- Draw space stations
+    for _, station in ipairs(self.spaceStations) do
+        station:draw()
+    end
     
     love.graphics.pop()
     
@@ -248,6 +295,22 @@ function Game:drawUI()
     love.graphics.rectangle('fill', 10, 70, 200 * healthPercent, 20)
     love.graphics.setColor(1, 1, 1)
     love.graphics.rectangle('line', 10, 70, 200, 20)
+    
+    -- Space station proximity indicators
+    local yOffset = 210
+    for _, station in ipairs(self.spaceStations) do
+        local distance = math.sqrt((self.player.x - station.x)^2 + (self.player.y - station.y)^2)
+        
+        if distance <= station.commRange then
+            love.graphics.setColor(station.color[1], station.color[2], station.color[3], 1.0)
+            if distance <= station.dockingRange then
+                love.graphics.print("[DOCK] " .. string.upper(station.type) .. " STATION", 10, yOffset, 0, 1.2, 1.2)
+            else
+                love.graphics.print("[COMM] " .. string.upper(station.type) .. " STATION", 10, yOffset, 0, 1, 1)
+            end
+            yOffset = yOffset + 25
+        end
+    end
 end
 
 function Game:drawGameOver()
