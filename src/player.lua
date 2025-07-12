@@ -1,0 +1,171 @@
+-- Player ship class
+
+local Player = {}
+Player.__index = Player
+
+function Player:new(x, y)
+    local player = setmetatable({}, Player)
+    
+    player.x = x
+    player.y = y
+    player.radius = 15
+    player.speed = 300
+    player.health = 100
+    player.maxHealth = 100
+    
+    -- Weapon properties
+    player.fireRate = 0.15
+    player.lastShot = 0
+    player.weaponType = 1 -- 1 = single, 2 = spread, 3 = rapid
+    
+    -- Visual properties
+    player.angle = 0
+    player.rotation = 0 -- Player's facing direction
+    player.thrustParticles = {}
+    
+    return player
+end
+
+function Player:update(dt)
+    -- Handle rotation input
+    if love.keyboard.isDown('q') then
+        self.rotation = self.rotation - 2 * dt -- Rotate left
+    end
+    if love.keyboard.isDown('e') then
+        self.rotation = self.rotation + 2 * dt -- Rotate right
+    end
+    
+    -- Handle movement relative to player rotation
+    local dx, dy = 0, 0
+    
+    if love.keyboard.isDown('w', 'up') then
+        dy = dy - 1
+    end
+    if love.keyboard.isDown('s', 'down') then
+        dy = dy + 1
+    end
+    if love.keyboard.isDown('a', 'left') then
+        dx = dx - 1
+    end
+    if love.keyboard.isDown('d', 'right') then
+        dx = dx + 1
+    end
+    
+    -- Normalize diagonal movement
+    if dx ~= 0 and dy ~= 0 then
+        dx = dx * 0.707
+        dy = dy * 0.707
+    end
+    
+    -- Rotate movement vector by player rotation
+    local rotatedDx = dx * math.cos(-self.rotation) - dy * math.sin(-self.rotation)
+    local rotatedDy = dx * math.sin(-self.rotation) + dy * math.cos(-self.rotation)
+    
+    -- Update position (no screen boundaries - infinite world)
+    self.x = self.x + rotatedDx * self.speed * dt
+    self.y = self.y + rotatedDy * self.speed * dt
+    
+    -- Update weapon cooldown
+    self.lastShot = self.lastShot + dt
+    
+    -- Update thrust particles
+    if dx ~= 0 or dy ~= 0 then
+        self:createThrustParticles(dt)
+    end
+    
+    for i = #self.thrustParticles, 1, -1 do
+        local particle = self.thrustParticles[i]
+        particle.life = particle.life - dt
+        particle.x = particle.x + particle.vx * dt
+        particle.y = particle.y + particle.vy * dt
+        
+        if particle.life <= 0 then
+            table.remove(self.thrustParticles, i)
+        end
+    end
+end
+
+function Player:createThrustParticles(dt)
+    if #self.thrustParticles < 20 then
+        -- Create thrust particles behind the player based on rotation
+        local thrustAngle = self.rotation + math.pi -- Opposite direction
+        local thrustDistance = self.radius + 5
+        
+        table.insert(self.thrustParticles, {
+            x = self.x + math.cos(thrustAngle) * thrustDistance + math.random(-5, 5),
+            y = self.y + math.sin(thrustAngle) * thrustDistance + math.random(-5, 5),
+            vx = math.cos(thrustAngle) * math.random(30, 60) + math.random(-20, 20),
+            vy = math.sin(thrustAngle) * math.random(30, 60) + math.random(-20, 20),
+            life = math.random(0.2, 0.5),
+            maxLife = 0.5
+        })
+    end
+end
+
+function Player:shoot(angle, bulletManager)
+    if self.lastShot >= self.fireRate then
+        self.lastShot = 0
+        
+        -- Calculate bullet spawn position at front of rotated ship
+        local spawnDistance = self.radius
+        local spawnX = self.x + math.cos(self.rotation) * spawnDistance
+        local spawnY = self.y + math.sin(self.rotation) * spawnDistance
+        
+        if self.weaponType == 1 then
+            -- Single shot
+            bulletManager:addPlayerBullet(spawnX, spawnY, angle, 500, 25)
+        elseif self.weaponType == 2 then
+            -- Spread shot
+            for i = -1, 1 do
+                local spreadAngle = angle + i * 0.3
+                bulletManager:addPlayerBullet(spawnX, spawnY, spreadAngle, 450, 15)
+            end
+        elseif self.weaponType == 3 then
+            -- Rapid fire
+            bulletManager:addPlayerBullet(spawnX, spawnY, angle, 600, 12)
+        end
+    end
+end
+
+function Player:takeDamage(damage)
+    self.health = math.max(0, self.health - damage)
+end
+
+function Player:draw()
+    love.graphics.push()
+    love.graphics.translate(self.x, self.y)
+    love.graphics.rotate(self.rotation)
+    
+    -- Draw thrust particles
+    for _, particle in ipairs(self.thrustParticles) do
+        local alpha = particle.life / particle.maxLife
+        love.graphics.setColor(0.2, 0.5, 1, alpha)
+        love.graphics.circle('fill', particle.x - self.x, particle.y - self.y, 2)
+    end
+    
+    -- Draw ship body (sci-fi triangle)
+    love.graphics.setColor(0.7, 0.9, 1) -- Light blue
+    love.graphics.polygon('fill', 
+        0, -self.radius,        -- Top point (forward)
+        -self.radius*0.6, self.radius*0.8,   -- Bottom left
+        self.radius*0.6, self.radius*0.8     -- Bottom right
+    )
+    
+    -- Draw ship core
+    love.graphics.setColor(0, 1, 1) -- Cyan
+    love.graphics.circle('fill', 0, 0, self.radius * 0.3)
+    
+    -- Draw ship outline
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setLineWidth(2)
+    love.graphics.polygon('line', 
+        0, -self.radius,
+        -self.radius*0.6, self.radius*0.8,
+        self.radius*0.6, self.radius*0.8
+    )
+    
+    love.graphics.pop()
+    love.graphics.setColor(1, 1, 1)
+end
+
+return Player
