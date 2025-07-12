@@ -39,16 +39,16 @@ function Player:update(dt)
     local dx, dy = 0, 0
     
     if love.keyboard.isDown('w', 'up') then
-        dy = dy - 1
-    end
-    if love.keyboard.isDown('s', 'down') then
-        dy = dy + 1
-    end
-    if love.keyboard.isDown('a', 'left') then
         dx = dx - 1
     end
-    if love.keyboard.isDown('d', 'right') then
+    if love.keyboard.isDown('s', 'down') then
         dx = dx + 1
+    end
+    if love.keyboard.isDown('a', 'left') then
+        dy = dy - 1
+    end
+    if love.keyboard.isDown('d', 'right') then
+        dy = dy + 1
     end
     
     -- Normalize diagonal movement
@@ -58,8 +58,9 @@ function Player:update(dt)
     end
     
     -- Rotate movement vector by player rotation
-    local rotatedDx = dx * math.cos(-self.rotation) - dy * math.sin(-self.rotation)
-    local rotatedDy = dx * math.sin(-self.rotation) + dy * math.cos(-self.rotation)
+    -- Forward/backward (dy) and left/right (dx) relative to ship's facing
+    local rotatedDx = dx * math.cos(self.rotation + math.pi/2) + dy * math.cos(self.rotation)
+    local rotatedDy = dx * math.sin(self.rotation + math.pi/2) + dy * math.sin(self.rotation)
     
     -- Update position (no screen boundaries - infinite world)
     self.x = self.x + rotatedDx * self.speed * dt
@@ -88,7 +89,8 @@ end
 function Player:createThrustParticles(dt)
     if #self.thrustParticles < 20 then
         -- Create thrust particles behind the player based on rotation
-        local thrustAngle = self.rotation + math.pi -- Opposite direction
+        -- Back of ship is opposite to front (rotation - π/2 + π = rotation + π/2)
+        local thrustAngle = self.rotation + math.pi/2 -- Back of ship
         local thrustDistance = self.radius + 5
         
         table.insert(self.thrustParticles, {
@@ -107,9 +109,11 @@ function Player:shoot(angle, bulletManager)
         self.lastShot = 0
         
         -- Calculate bullet spawn position at front of rotated ship
+        -- Ship's front points at (0, -radius) in local coords, so world angle is rotation - π/2
         local spawnDistance = self.radius
-        local spawnX = self.x + math.cos(self.rotation) * spawnDistance
-        local spawnY = self.y + math.sin(self.rotation) * spawnDistance
+        local frontAngle = self.rotation - math.pi/2
+        local spawnX = self.x + math.cos(frontAngle) * spawnDistance
+        local spawnY = self.y + math.sin(frontAngle) * spawnDistance
         
         if self.weaponType == 1 then
             -- Single shot

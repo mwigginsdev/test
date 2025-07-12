@@ -96,7 +96,17 @@ function Game:update(dt)
     
     if shouldShoot then
         local mouseX, mouseY = love.mouse.getPosition()
-        local angle = math.atan2(mouseY - self.player.y, mouseX - self.player.x)
+        
+        -- Transform mouse coordinates to world space (accounting for camera rotation)
+        local centerX, centerY = self.width / 2, self.height / 2
+        local relativeMouseX = mouseX - centerX
+        local relativeMouseY = mouseY - centerY
+        
+        -- Rotate mouse position by camera rotation to get world coordinates
+        local worldMouseX = self.player.x + (relativeMouseX * math.cos(-self.camera.rotation) - relativeMouseY * math.sin(-self.camera.rotation))
+        local worldMouseY = self.player.y + (relativeMouseX * math.sin(-self.camera.rotation) + relativeMouseY * math.cos(-self.camera.rotation))
+        
+        local angle = math.atan2(worldMouseY - self.player.y, worldMouseX - self.player.x)
         self.player:shoot(angle, self.bulletManager)
     end
     
