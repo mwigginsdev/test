@@ -61,7 +61,7 @@ function Stealth:loadClassConfig()
             name = "Cloak",
             description = "Become invisible for 8 seconds, +50% damage from behind",
             manaCost = 60,
-            cooldown = 35,
+            cooldown = 45,
             use = function(player, class)
                 return class:useCloak(player)
             end

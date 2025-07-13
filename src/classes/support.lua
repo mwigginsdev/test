@@ -59,9 +59,9 @@ function Support:loadClassConfig()
     self.abilities = {
         {
             name = "Healing Beam",
-            description = "Heal nearby allies for 60 HP over 3 seconds",
+            description = "Heal nearby allies for 50 HP within 150 units",
             manaCost = 50,
-            cooldown = 15,
+            cooldown = 20,
             use = function(player, class)
                 return class:useHealingBeam(player)
             end
@@ -84,9 +84,9 @@ function Support:useHealingBeam(player)
     -- Create healing beam effect
     player.healingBeam = {
         active = true,
-        duration = 3.0,
-        healRate = 20, -- HP per second
-        range = 120,
+        duration = 0.5, -- Visual effect duration
+        healAmount = 50, -- Instant heal amount
+        range = 150,
         startTime = love.timer.getTime()
     }
     

@@ -22,6 +22,7 @@ local Nexus = require('src.nexus')
 local ShipClassManager = require('src.ship_class_manager')
 local AbilitySystem = require('src.ability_system')
 local ManaSystem = require('src.mana_system')
+local DeathSystem = require('src.death_system')
 
 local Game = {}
 
@@ -63,6 +64,7 @@ function Game:init()
     self.shipClassManager = ShipClassManager:new()
     self.abilitySystem = AbilitySystem:new()
     self.manaSystem = ManaSystem:new()
+    self.deathSystem = DeathSystem:new()
     
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
@@ -88,6 +90,10 @@ function Game:startGame(ship)
         self.player.credits = ship.credits or 1000
         self.player.experience = ship.experience or 0
         self.player.experienceToNext = ship.experienceToNext or 100
+        
+        -- Mark as local player for death system (needs to be set before ability system)
+        self.player.id = "local_player"
+        self.player.name = ship.name
         
         -- Apply ship class if available
         if ship.classType then
@@ -517,6 +523,11 @@ function Game:update(dt)
     if self.manaSystem then
         self.manaSystem:updatePlayer(self.player, dt)
     end
+    
+    -- Update death system
+    if self.deathSystem then
+        self.deathSystem:update(dt)
+    end
     self.bulletManager:update(dt, self.player)
     self.enemyManager:update(dt, self.player, self.bulletManager)
     self.particleManager:update(dt)
@@ -631,14 +642,10 @@ function Game:checkCollisions()
     if not self.docking.isVisible then
         for _, bullet in ipairs(self.bulletManager.enemyBullets) do
             if self:checkCollision(bullet, self.player) then
-                self.player:takeDamage(bullet.damage)
+                self.player:takeDamage(bullet.damage, self.deathSystem, "Enemy projectile")
                 bullet.active = false
                 self.particleManager:createExplosion(self.player.x, self.player.y, {0.1, 0.5, 0.9})
                 self.audioManager:playSound("hit")
-                
-                if self.player.health <= 0 then
-                    self:returnToMenu()
-                end
             end
         end
         
@@ -648,27 +655,19 @@ function Game:checkCollisions()
             local hits = self.bulletManager:checkServerBulletCollisions(self.player, clientId)
             
             for _, bullet in ipairs(hits) do
-                self.player:takeDamage(bullet.damage)
+                self.player:takeDamage(bullet.damage, self.deathSystem, "Server projectile")
                 self.particleManager:createExplosion(self.player.x, self.player.y, {0.9, 0.3, 0.1})
                 self.audioManager:playSound("hit")
-                
-                if self.player.health <= 0 then
-                    self:returnToMenu()
-                end
             end
         end
         
         -- Enemies vs player (only if not docked)
         for _, enemy in ipairs(self.enemyManager.enemies) do
             if self:checkCollision(enemy, self.player) then
-                self.player:takeDamage(10)
+                self.player:takeDamage(10, self.deathSystem, "Enemy collision")
                 enemy.health = 0
                 self.particleManager:createExplosion(self.player.x, self.player.y, {1, 0, 0})
                 self.audioManager:playSound("explosion")
-                
-                if self.player.health <= 0 then
-                    self:returnToMenu()
-                end
             end
         end
     end
@@ -846,6 +845,11 @@ function Game:drawUI()
         self.abilitySystem:drawAbilityUI(self.player, 10, self.height - 60)
     end
     
+    -- Death system UI
+    if self.deathSystem then
+        self.deathSystem:drawDeathUI(self.player, self.width/2 - 100, self.height/2 - 50)
+    end
+    
     -- Controls help
     love.graphics.setColor(0.7, 0.7, 0.7)
     love.graphics.print("CONTROLS: [I] Inventory  [TAB] Settings  [F] Dock  [1-4] Class Abilities", 10, self.height - 40, 0, 0.9, 0.9)
@@ -985,9 +989,11 @@ function Game:keypressed(key)
             print("Player rotation reset")
         end
     elseif key == '1' or key == '2' or key == '3' or key == '4' then
-        -- Use class abilities
+        -- Use class abilities (only during gameplay)
+        if self.gameState ~= "playing" then return end
+        
         local abilityIndex = tonumber(key)
-        if self.abilitySystem then
+        if self.abilitySystem and self.player then
             local success = self.abilitySystem:useAbility(self.player, abilityIndex)
             if not success then
                 local abilityInfo = self.abilitySystem:getAbilityInfo(self.player, abilityIndex)

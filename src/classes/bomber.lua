@@ -59,7 +59,7 @@ function Bomber:loadClassConfig()
     self.abilities = {
         {
             name = "EMP Blast",
-            description = "Disable enemy weapons in 150 unit radius for 4 seconds",
+            description = "Disable enemy weapons in 150 unit radius for 3 seconds",
             manaCost = 45,
             cooldown = 30,
             use = function(player, class)

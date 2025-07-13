@@ -254,8 +254,16 @@ function Player:shoot(angle, bulletManager)
     return false -- Couldn't shoot (cooldown)
 end
 
-function Player:takeDamage(damage)
+function Player:takeDamage(damage, deathSystem, causeOfDeath)
     self.health = math.max(0, self.health - damage)
+    
+    -- Check for death
+    if self.health <= 0 and not self.isDying and deathSystem then
+        deathSystem:markPlayerDying(self, causeOfDeath or "Combat damage")
+    end
+    
+    -- Mark damage time for mana system
+    self.lastDamageTime = love.timer.getTime()
 end
 
 function Player:draw()

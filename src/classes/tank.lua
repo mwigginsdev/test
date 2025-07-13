@@ -59,7 +59,7 @@ function Tank:loadClassConfig()
     self.abilities = {
         {
             name = "Taunt",
-            description = "Force all nearby enemies to target you for 6 seconds",
+            description = "Force all nearby enemies to target you for 5 seconds",
             manaCost = 35,
             cooldown = 20,
             use = function(player, class)
@@ -75,7 +75,7 @@ function Tank:useTaunt(player)
     -- Apply taunt effect
     player.taunt = {
         active = true,
-        duration = 6.0,
+        duration = 5.0,
         range = 200,
         startTime = love.timer.getTime()
     }

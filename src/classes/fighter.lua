@@ -59,9 +59,9 @@ function Fighter:loadClassConfig()
     self.abilities = {
         {
             name = "Weapon Overcharge",
-            description = "Increase weapon damage by 100% for 8 seconds",
+            description = "Increase weapon damage by 100% for 10 seconds",
             manaCost = 40,
-            cooldown = 25,
+            cooldown = 30,
             use = function(player, class)
                 return class:useWeaponOvercharge(player)
             end
@@ -75,7 +75,7 @@ function Fighter:useWeaponOvercharge(player)
     -- Apply weapon overcharge effect
     player.weaponOvercharge = {
         active = true,
-        duration = 8.0,
+        duration = 10.0,
         damageMultiplier = 2.0,
         startTime = love.timer.getTime()
     }

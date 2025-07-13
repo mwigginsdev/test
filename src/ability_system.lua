@@ -41,6 +41,7 @@ function AbilitySystem:initializePlayer(player)
             
             self.activeCooldowns[player.id][i] = 0
         end
+        print("Loaded " .. #player.shipClass.abilities .. " abilities for " .. (player.shipClass.name or "Unknown Class"))
     end
 end
 

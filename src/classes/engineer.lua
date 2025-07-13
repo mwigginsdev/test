@@ -61,7 +61,7 @@ function Engineer:loadClassConfig()
             name = "Deploy Turret",
             description = "Deploy an automated turret that lasts 30 seconds",
             manaCost = 50,
-            cooldown = 40,
+            cooldown = 60,
             use = function(player, class)
                 return class:deployTurret(player)
             end

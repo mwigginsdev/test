@@ -59,9 +59,9 @@ function Interceptor:loadClassConfig()
     self.abilities = {
         {
             name = "Speed Boost",
-            description = "Increase speed by 80% for 6 seconds",
+            description = "Increase speed by 80% for 5 seconds",
             manaCost = 30,
-            cooldown = 20,
+            cooldown = 25,
             use = function(player, class)
                 return class:useSpeedBoost(player)
             end
@@ -75,7 +75,7 @@ function Interceptor:useSpeedBoost(player)
     -- Apply speed boost effect
     player.speedBoost = {
         active = true,
-        duration = 6.0,
+        duration = 5.0,
         speedMultiplier = 1.8,
         startTime = love.timer.getTime(),
         originalSpeed = player.speed
