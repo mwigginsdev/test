@@ -2,6 +2,7 @@
 
 local Player = require('src.player')
 local BulletManager = require('src.bullet_manager')
+local BulletManagerMP = require('src.bullet_manager_mp')
 local EnemyManager = require('src.enemy_manager')
 local ParticleManager = require('src.particle_manager')
 local AudioManager = require('src.audio_manager')
@@ -14,6 +15,10 @@ local Inventory = require('src.inventory')
 local Docking = require('src.docking')
 local StartMenu = require('src.start_menu')
 local ShipCreation = require('src.ship_creation')
+-- Use mock network for testing without external dependencies
+local NetworkClient = require('src.mock_network')
+local PlayerManager = require('src.player_manager')
+local Nexus = require('src.nexus')
 
 local Game = {}
 
@@ -22,8 +27,9 @@ function Game:init()
     self.height = love.graphics.getHeight()
     
     -- Game state
-    self.gameState = "menu" -- "menu", "playing", "ship_creation"
+    self.gameState = "menu" -- "menu", "playing", "ship_creation", "multiplayer", "nexus"
     self.currentShip = nil
+    self.multiplayerMode = false
     
     -- Initialize menus
     self.startMenu = StartMenu:new()
@@ -39,6 +45,16 @@ function Game:init()
     self.settings = nil
     self.inventory = nil
     self.docking = nil
+    
+    -- Network client for multiplayer
+    self.networkClient = nil
+    self.otherPlayers = {}
+    
+    -- Player manager for multiplayer
+    self.playerManager = nil
+    
+    -- Nexus hub world
+    self.nexus = nil
     
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
@@ -114,11 +130,242 @@ function Game:startGame(ship)
     print("Game started with ship: " .. (ship.name or "Unknown"))
 end
 
+function Game:startMultiplayerGame(ship, serverIP, serverPort)
+    self.gameState = "playing"
+    self.currentShip = ship
+    self.multiplayerMode = true
+    
+    -- Initialize network client
+    self.networkClient = NetworkClient:new()
+    local connected = self.networkClient:connect(serverIP, serverPort, ship.name)
+    
+    if not connected then
+        print("Failed to connect to server")
+        self:returnToMenu()
+        return false
+    end
+    
+    -- Initialize player manager for multiplayer
+    self.playerManager = PlayerManager:new()
+    
+    -- Initialize game systems
+    self.player = Player:new(self.width / 2, self.height - 100)
+    
+    -- Set local player in player manager
+    self.playerManager:setLocalPlayer(self.player, self.networkClient:getClientId())
+    self.bulletManager = BulletManagerMP:new()
+    self.enemyManager = EnemyManager:new(self.width, self.height)
+    self.particleManager = ParticleManager:new()
+    self.audioManager = AudioManager:new()
+    
+    -- Apply ship stats to player
+    if ship then
+        self.player.health = ship.health
+        self.player.maxHealth = ship.maxHealth
+        self.player.speed = ship.speed
+        self.player.fireRate = ship.fireRate
+        self.player.level = ship.level or 1
+        self.player.credits = ship.credits or 1000
+        self.player.experience = ship.experience or 0
+        self.player.experienceToNext = ship.experienceToNext or 100
+        
+        -- Apply ship appearance
+        self.player.shipShape = ship.shape or "triangle"
+        self.player.shipColor = ship.color or {0.2, 0.8, 1.0}
+    end
+    
+    -- Initialize UI systems
+    self.settings = Settings:new(self)
+    self.inventory = Inventory:new(self)
+    self.docking = Docking:new(self)
+    
+    -- Game state
+    self.score = 0
+    self.gameOver = false
+    self.paused = false
+    self.autoShoot = false
+    
+    -- Custom crosshair
+    self.crosshair = {
+        enabled = true,
+        size = 20,
+        thickness = 2,
+        color = {0, 1, 1, 0.8}
+    }
+    
+    -- Camera system
+    self.camera = {
+        x = 0,
+        y = 0,
+        targetX = 0,
+        targetY = 0,
+        rotation = 0,
+        targetRotation = 0,
+        smoothing = 5,
+        rotationSpeed = 2
+    }
+    
+    -- Background stars
+    self:generateStars()
+    
+    -- Start background music
+    self.audioManager:startMusic()
+    
+    print("Multiplayer game started with ship: " .. (ship.name or "Unknown"))
+    return true
+end
+
+function Game:startNexus(ship)
+    self.gameState = "nexus"
+    self.currentShip = ship
+    self.multiplayerMode = true
+    
+    -- Initialize network client for nexus
+    self.networkClient = NetworkClient:new()
+    local connected = self.networkClient:connect("localhost", 7777, ship.name)
+    
+    if not connected then
+        print("Failed to connect to nexus server")
+        self:returnToMenu()
+        return false
+    end
+    
+    -- Initialize nexus
+    self.nexus = Nexus:new(self.width, self.height)
+    
+    -- Initialize player manager for multiplayer
+    self.playerManager = PlayerManager:new()
+    
+    -- Initialize minimal game systems for nexus
+    self.player = Player:new(self.width / 2, self.height / 2) -- Start in center
+    self.playerManager:setLocalPlayer(self.player, self.networkClient:getClientId())
+    self.audioManager = AudioManager:new()
+    self.particleManager = ParticleManager:new()
+    
+    -- Apply ship stats to player
+    if ship then
+        self.player.health = ship.health
+        self.player.maxHealth = ship.maxHealth
+        self.player.speed = ship.speed
+        self.player.level = ship.level or 1
+        self.player.credits = ship.credits or 1000
+        
+        -- Apply ship appearance
+        self.player.shipShape = ship.shape or "triangle"
+        self.player.shipColor = ship.color or {0.2, 0.8, 1.0}
+    end
+    
+    -- Camera system for nexus
+    self.camera = {
+        x = 0,
+        y = 0,
+        targetX = 0,
+        targetY = 0,
+        rotation = 0,
+        targetRotation = 0,
+        smoothing = 5,
+        rotationSpeed = 2
+    }
+    
+    -- Background stars
+    self:generateStars()
+    
+    -- Start ambient music
+    self.audioManager:startMusic()
+    
+    -- Add welcome message to nexus chat
+    self.nexus:addChatMessage("Welcome to the Nexus!", "SYSTEM")
+    self.nexus:addChatMessage("This is a safe zone where you can chat with other players.", "SYSTEM")
+    self.nexus:addChatMessage("Use portals 1-4 to enter combat areas.", "SYSTEM")
+    
+    print("Entered Nexus hub with ship: " .. (ship.name or "Unknown"))
+    return true
+end
+
+function Game:updateNexus(dt)
+    if not self.player or not self.nexus then
+        return
+    end
+    
+    -- Update network client
+    if self.networkClient then
+        self.networkClient:update(dt, self.player)
+        
+        -- Update player manager with network data
+        if self.playerManager then
+            local otherPlayers = self.networkClient:getOtherPlayers()
+            for _, playerData in ipairs(otherPlayers) do
+                self.playerManager:updateRemotePlayer(playerData.id, playerData)
+            end
+            
+            -- Update all players
+            self.playerManager:updateAll(dt)
+        end
+        
+        -- If not connected, return to menu
+        if not self.networkClient:isConnected() then
+            print("Lost connection to nexus server")
+            self:returnToMenu()
+            return
+        end
+    end
+    
+    -- Update camera to follow player
+    self.camera.targetX = self.player.x - self.width / 2
+    self.camera.targetY = self.player.y - self.height / 2
+    
+    -- Smooth camera movement (no rotation in nexus)
+    self.camera.x = self.camera.x + (self.camera.targetX - self.camera.x) * self.camera.smoothing * dt
+    self.camera.y = self.camera.y + (self.camera.targetY - self.camera.y) * self.camera.smoothing * dt
+    
+    -- Update stars
+    for _, star in ipairs(self.stars) do
+        star.y = star.y + star.speed * dt
+        if star.y > self.camera.y + self.height + 100 then
+            star.y = self.camera.y - 100
+            star.x = self.camera.x + math.random(0, self.width)
+        end
+    end
+    
+    -- Update nexus
+    self.nexus:update(dt, self.player, self.playerManager)
+    
+    -- Update player
+    if self.playerManager then
+        -- Player manager already updated players above
+    else
+        self.player:update(dt)
+    end
+    
+    -- Update particle effects
+    if self.particleManager then
+        self.particleManager:update(dt)
+    end
+end
+
 function Game:returnToMenu()
     self.gameState = "menu"
     self.startMenu:show()
     if self.audioManager then
         self.audioManager:stopMusic()
+    end
+    
+    -- Disconnect from server if connected
+    if self.networkClient then
+        self.networkClient:disconnect()
+        self.networkClient = nil
+        self.multiplayerMode = false
+        self.otherPlayers = {}
+    end
+    
+    -- Clean up player manager
+    if self.playerManager then
+        self.playerManager = nil
+    end
+    
+    -- Clean up nexus
+    if self.nexus then
+        self.nexus = nil
     end
 end
 
@@ -171,8 +418,46 @@ function Game:update(dt)
         return
     end
     
+    -- Handle nexus state
+    if self.gameState == "nexus" then
+        self:updateNexus(dt)
+        return
+    end
+    
     if self.gameOver or self.paused or not self.player then
         return
+    end
+    
+    -- Update network client if in multiplayer mode
+    if self.multiplayerMode and self.networkClient then
+        self.networkClient:update(dt, self.player)
+        
+        -- Update player manager with network data
+        if self.playerManager then
+            local otherPlayers = self.networkClient:getOtherPlayers()
+            for _, playerData in ipairs(otherPlayers) do
+                self.playerManager:updateRemotePlayer(playerData.id, playerData)
+            end
+            
+            -- Update all players
+            self.playerManager:updateAll(dt)
+        end
+        
+        -- Update bullet manager with server bullets
+        if self.bulletManager and self.bulletManager.updateServerBullets then
+            local serverBullets = self.networkClient:getServerBullets()
+            self.bulletManager:updateServerBullets(serverBullets)
+        end
+        
+        -- Update other players from server (legacy)
+        self.otherPlayers = self.networkClient:getOtherPlayers()
+        
+        -- If not connected, return to menu
+        if not self.networkClient:isConnected() then
+            print("Lost connection to server")
+            self:returnToMenu()
+            return
+        end
     end
     
     -- Camera rotation is now handled by the player
@@ -198,7 +483,11 @@ function Game:update(dt)
     end
     
     -- Update game systems
-    self.player:update(dt)
+    if self.multiplayerMode and self.playerManager then
+        -- Player manager already updated players above
+    else
+        self.player:update(dt)
+    end
     self.bulletManager:update(dt, self.player)
     self.enemyManager:update(dt, self.player, self.bulletManager)
     self.particleManager:update(dt)
@@ -229,7 +518,30 @@ function Game:update(dt)
         local worldMouseY = self.player.y + (relativeMouseX * math.sin(-self.camera.rotation) + relativeMouseY * math.cos(-self.camera.rotation))
         
         local angle = math.atan2(worldMouseY - self.player.y, worldMouseX - self.player.x)
-        local didShoot = self.player:shoot(angle, self.bulletManager)
+        local didShoot = false
+        
+        if self.multiplayerMode and self.networkClient then
+            -- In multiplayer, use predicted shooting
+            if self.player.lastShot >= self.player.fireRate then
+                self.player.lastShot = 0
+                didShoot = true
+                
+                -- Add predicted bullet for immediate feedback
+                if self.bulletManager and self.bulletManager.addPredictedBullet then
+                    self.bulletManager:addPredictedBullet(
+                        self.player.x, self.player.y, angle, 500, 25, 
+                        self.networkClient:getClientId()
+                    )
+                end
+                
+                -- Notify server
+                self.networkClient:sendPlayerShoot(self.player.x, self.player.y, angle)
+            end
+        else
+            -- Single player mode
+            didShoot = self.player:shoot(angle, self.bulletManager)
+        end
+        
         if didShoot then
             self.audioManager:playSound("shoot")
         end
@@ -301,6 +613,22 @@ function Game:checkCollisions()
             end
         end
         
+        -- Server bullets vs player (multiplayer)
+        if self.multiplayerMode and self.bulletManager.checkServerBulletCollisions then
+            local clientId = self.networkClient and self.networkClient:getClientId()
+            local hits = self.bulletManager:checkServerBulletCollisions(self.player, clientId)
+            
+            for _, bullet in ipairs(hits) do
+                self.player:takeDamage(bullet.damage)
+                self.particleManager:createExplosion(self.player.x, self.player.y, {0.9, 0.3, 0.1})
+                self.audioManager:playSound("hit")
+                
+                if self.player.health <= 0 then
+                    self:returnToMenu()
+                end
+            end
+        end
+        
         -- Enemies vs player (only if not docked)
         for _, enemy in ipairs(self.enemyManager.enemies) do
             if self:checkCollision(enemy, self.player) then
@@ -337,6 +665,9 @@ function Game:draw()
     elseif self.gameState == "ship_creation" then
         self.shipCreation:draw()
         return
+    elseif self.gameState == "nexus" then
+        self:drawNexus()
+        return
     end
     
     if not self.player then
@@ -359,10 +690,18 @@ function Game:draw()
     end
     
     -- Draw game objects
-    self.player:draw()
+    if self.multiplayerMode and self.playerManager then
+        -- Player manager draws all players
+        self.playerManager:drawAll()
+    else
+        self.player:draw()
+    end
+    
     self.bulletManager:draw()
     self.enemyManager:draw()
     self.particleManager:draw()
+    
+    -- Server bullets are now drawn by BulletManagerMP
     
     -- Draw space stations
     for _, station in ipairs(self.spaceStations) do
@@ -523,6 +862,10 @@ function Game:keypressed(key)
             self.shipCreation:show(data)
         elseif result == "load_ship" then
             self:startGame(data)
+        elseif result == "test_multiplayer" then
+            self:startMultiplayerGame(data, "localhost", 7777)
+        elseif result == "enter_nexus" then
+            self:startNexus(data)
         elseif result == "settings" then
             -- Initialize temporary settings if needed
             if not self.settings then
@@ -541,6 +884,9 @@ function Game:keypressed(key)
             self.gameState = "menu"
             self.shipCreation:hide()
         end
+        return
+    elseif self.gameState == "nexus" then
+        self:handleNexusInput(key)
         return
     end
     
@@ -601,6 +947,152 @@ end
 
 function Game:mousereleased(x, y, button)
     -- Handle mouse release if needed
+end
+
+function Game:drawOtherPlayers()
+    for _, otherPlayer in ipairs(self.otherPlayers) do
+        love.graphics.push()
+        love.graphics.translate(otherPlayer.x, otherPlayer.y)
+        love.graphics.rotate(otherPlayer.rotation or 0)
+        
+        -- Draw other player's ship (simplified version)
+        love.graphics.setColor(0.8, 0.8, 0.8) -- Gray color for other players
+        love.graphics.polygon('fill', 
+            0, -15,        -- Top point (forward)
+            -9, 12,        -- Bottom left
+            9, 12          -- Bottom right
+        )
+        
+        -- Draw outline
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.setLineWidth(1)
+        love.graphics.polygon('line', 
+            0, -15,
+            -9, 12,
+            9, 12
+        )
+        
+        love.graphics.pop()
+        
+        -- Draw player name above ship
+        love.graphics.setColor(0.8, 1, 0.8)
+        love.graphics.print("Player " .. otherPlayer.id, otherPlayer.x - 30, otherPlayer.y - 35)
+        
+        -- Draw health bar
+        local healthPercent = otherPlayer.health / 100 -- Assuming max health 100
+        love.graphics.setColor(0.2, 0.2, 0.2)
+        love.graphics.rectangle('fill', otherPlayer.x - 20, otherPlayer.y - 25, 40, 4)
+        love.graphics.setColor(0, 1, 0)
+        love.graphics.rectangle('fill', otherPlayer.x - 20, otherPlayer.y - 25, 40 * healthPercent, 4)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.rectangle('line', otherPlayer.x - 20, otherPlayer.y - 25, 40, 4)
+    end
+end
+
+function Game:drawServerBullets()
+    if not self.networkClient then
+        return
+    end
+    
+    local serverBullets = self.networkClient:getServerBullets()
+    
+    for _, bullet in ipairs(serverBullets) do
+        -- Only draw bullets from other players
+        if bullet.playerId ~= self.networkClient:getClientId() then
+            love.graphics.setColor(1, 0.3, 0.3) -- Red bullets for other players
+            love.graphics.circle('fill', bullet.x, bullet.y, 3)
+        end
+    end
+end
+
+function Game:drawNexus()
+    if not self.nexus or not self.player then
+        return
+    end
+    
+    -- Apply camera transform for world objects
+    love.graphics.push()
+    love.graphics.translate(-self.camera.x, -self.camera.y)
+    
+    -- Draw starfield background
+    love.graphics.setColor(1, 1, 1)
+    for _, star in ipairs(self.stars) do
+        love.graphics.setColor(star.brightness, star.brightness, star.brightness)
+        love.graphics.circle('fill', star.x, star.y, 1)
+    end
+    
+    -- Draw nexus world
+    self.nexus:draw(self.camera, self.playerManager)
+    
+    -- Draw players
+    if self.playerManager then
+        self.playerManager:drawAll()
+    else
+        self.player:draw()
+    end
+    
+    -- Draw particles
+    if self.particleManager then
+        self.particleManager:draw()
+    end
+    
+    love.graphics.pop()
+    
+    -- Draw nexus UI (not affected by camera)
+    self.nexus:drawUI()
+    
+    -- Draw player info
+    self:drawNexusPlayerInfo()
+end
+
+function Game:drawNexusPlayerInfo()
+    -- Simple player info for nexus
+    love.graphics.setColor(0, 1, 1)
+    love.graphics.print("Health: " .. self.player.health, 10, 10, 0, 1.5, 1.5)
+    love.graphics.print("Level: " .. self.player.level, 10, 35, 0, 1.5, 1.5)
+    
+    -- Connection status
+    if self.networkClient and self.networkClient:isConnected() then
+        love.graphics.setColor(0, 1, 0)
+        love.graphics.print("CONNECTED TO NEXUS", 10, 60)
+        
+        -- Player count
+        local playerCount = self.playerManager and self.playerManager:getPlayerCount() or 1
+        love.graphics.print("Players Online: " .. playerCount, 10, 80)
+    else
+        love.graphics.setColor(1, 0, 0)
+        love.graphics.print("DISCONNECTED", 10, 60)
+    end
+    
+    love.graphics.setColor(1, 1, 1)
+end
+
+function Game:handleNexusInput(key)
+    if not self.nexus then
+        return
+    end
+    
+    local result, data = self.nexus:keypressed(key)
+    
+    if result == "chat" then
+        -- Send chat message to server/other players
+        if self.networkClient then
+            print("Chat: " .. data) -- For now, just print locally
+            self.nexus:addChatMessage(data, self.currentShip.name or "Player")
+        end
+    elseif result == "portal" then
+        -- Enter combat area via portal
+        print("Entering portal: " .. data.name)
+        self:startMultiplayerGame(self.currentShip, "localhost", 7777)
+    elseif result == "leave_nexus" then
+        self:returnToMenu()
+    end
+end
+
+function Game:textinput(text)
+    if self.gameState == "nexus" and self.nexus then
+        self.nexus:textinput(text)
+    end
 end
 
 return Game

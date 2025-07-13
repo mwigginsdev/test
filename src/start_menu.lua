@@ -8,7 +8,7 @@ function StartMenu:new()
     
     menu.isVisible = true
     menu.selectedOption = 1
-    menu.options = {"NEW GAME", "LOAD SHIP", "SETTINGS", "EXIT"}
+    menu.options = {"NEW GAME", "LOAD SHIP", "TEST MP", "NEXUS", "SETTINGS", "EXIT"}
     menu.ships = {}
     menu.showingShipSelect = false
     menu.selectedShip = 1
@@ -62,8 +62,8 @@ function StartMenu:keypressed(key)
         elseif key == "return" or key == "space" then
             return self:activateOption()
         elseif key == "escape" then
-            if self.selectedOption ~= 4 then
-                self.selectedOption = 4
+            if self.selectedOption ~= 6 then
+                self.selectedOption = 6 -- EXIT is now option 6
             end
         end
     end
@@ -79,6 +79,38 @@ function StartMenu:activateOption()
     elseif option == "LOAD SHIP" then
         self.showingShipSelect = true
         return nil
+    elseif option == "TEST MP" then
+        -- Create a test ship for multiplayer
+        local testShip = {
+            name = "TEST MP SHIP",
+            style = 1,
+            shape = "triangle",
+            color = {0.3, 0.8, 1.0},
+            level = 1,
+            credits = 1000,
+            health = 100,
+            maxHealth = 100,
+            speed = 300,
+            fireRate = 0.15,
+            exists = true
+        }
+        return "test_multiplayer", testShip
+    elseif option == "NEXUS" then
+        -- Create a test ship for nexus
+        local nexusShip = {
+            name = "NEXUS VISITOR",
+            style = 1,
+            shape = "triangle",
+            color = {1.0, 1.0, 0.3},
+            level = 1,
+            credits = 1000,
+            health = 100,
+            maxHealth = 100,
+            speed = 300,
+            fireRate = 0.15,
+            exists = true
+        }
+        return "enter_nexus", nexusShip
     elseif option == "SETTINGS" then
         return "settings"
     elseif option == "EXIT" then

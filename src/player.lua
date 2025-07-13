@@ -186,6 +186,25 @@ function Player:update(dt)
     end
 end
 
+function Player:updateVisualEffects(dt)
+    -- Update only visual effects for remote players (no input processing)
+    
+    -- Update weapon cooldown
+    self.lastShot = self.lastShot + dt
+    
+    -- Update thrust particles (they decay naturally)
+    for i = #self.thrustParticles, 1, -1 do
+        local particle = self.thrustParticles[i]
+        particle.life = particle.life - dt
+        particle.x = particle.x + particle.vx * dt
+        particle.y = particle.y + particle.vy * dt
+        
+        if particle.life <= 0 then
+            table.remove(self.thrustParticles, i)
+        end
+    end
+end
+
 function Player:createThrustParticles(dt)
     if #self.thrustParticles < 20 then
         -- Create thrust particles behind the player based on rotation
