@@ -254,8 +254,15 @@ function Player:shoot(angle, bulletManager)
     return false -- Couldn't shoot (cooldown)
 end
 
-function Player:takeDamage(damage, deathSystem, causeOfDeath)
-    self.health = math.max(0, self.health - damage)
+function Player:takeDamage(damage, deathSystem, causeOfDeath, defensiveSystem)
+    local finalDamage = damage
+    
+    -- Apply defensive system if available
+    if defensiveSystem then
+        finalDamage = defensiveSystem:processIncomingDamage(self, damage)
+    end
+    
+    self.health = math.max(0, self.health - finalDamage)
     
     -- Check for death
     if self.health <= 0 and not self.isDying and deathSystem then

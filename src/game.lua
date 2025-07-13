@@ -25,6 +25,7 @@ local ManaSystem = require('src.mana_system')
 local DeathSystem = require('src.death_system')
 local StatusEffectSystem = require('src.status_effect_system')
 local WeaponPatternSystem = require('src.weapon_pattern_system')
+local DefensiveSystem = require('src.defensive_system')
 
 local Game = {}
 
@@ -69,6 +70,7 @@ function Game:init()
     self.deathSystem = DeathSystem:new()
     self.statusEffectSystem = StatusEffectSystem:new()
     self.weaponPatternSystem = WeaponPatternSystem:new()
+    self.defensiveSystem = DefensiveSystem:new()
     
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
@@ -106,9 +108,10 @@ function Game:startGame(ship)
         -- Apply ship class if available
         if ship.classType then
             self.shipClassManager:applyClassToPlayer(self.player, ship.classType)
-            -- Initialize ability and mana systems for the player
+            -- Initialize ability, mana, and defensive systems for the player
             self.abilitySystem:initializePlayer(self.player)
             self.manaSystem:initializePlayer(self.player)
+            self.defensiveSystem:initializePlayer(self.player)
         end
         
         -- Apply ship appearance
@@ -666,7 +669,7 @@ function Game:checkCollisions()
     if not self.docking.isVisible then
         for _, bullet in ipairs(self.bulletManager.enemyBullets) do
             if self:checkCollision(bullet, self.player) then
-                self.player:takeDamage(bullet.damage, self.deathSystem, "Enemy projectile")
+                self.player:takeDamage(bullet.damage, self.deathSystem, "Enemy projectile", self.defensiveSystem)
                 bullet.active = false
                 self.particleManager:createExplosion(self.player.x, self.player.y, {0.1, 0.5, 0.9})
                 self.audioManager:playSound("hit")
@@ -679,7 +682,7 @@ function Game:checkCollisions()
             local hits = self.bulletManager:checkServerBulletCollisions(self.player, clientId)
             
             for _, bullet in ipairs(hits) do
-                self.player:takeDamage(bullet.damage, self.deathSystem, "Server projectile")
+                self.player:takeDamage(bullet.damage, self.deathSystem, "Server projectile", self.defensiveSystem)
                 self.particleManager:createExplosion(self.player.x, self.player.y, {0.9, 0.3, 0.1})
                 self.audioManager:playSound("hit")
             end
@@ -688,7 +691,7 @@ function Game:checkCollisions()
         -- Enemies vs player (only if not docked)
         for _, enemy in ipairs(self.enemyManager.enemies) do
             if self:checkCollision(enemy, self.player) then
-                self.player:takeDamage(10, self.deathSystem, "Enemy collision")
+                self.player:takeDamage(10, self.deathSystem, "Enemy collision", self.defensiveSystem)
                 enemy.health = 0
                 self.particleManager:createExplosion(self.player.x, self.player.y, {1, 0, 0})
                 self.audioManager:playSound("explosion")
@@ -752,6 +755,11 @@ function Game:draw()
     -- Draw ship class effects
     if self.shipClassManager then
         self.shipClassManager:drawClassEffects(self.player)
+    end
+    
+    -- Draw defensive effects
+    if self.defensiveSystem then
+        self.defensiveSystem:drawDefensiveEffects(self.player)
     end
     
     self.bulletManager:draw()
@@ -884,6 +892,11 @@ function Game:drawUI()
             love.graphics.setColor(1, 1, 0)
             love.graphics.print("Effects: " .. effectSummary, 220, 50, 0, 0.8, 0.8)
         end
+    end
+    
+    -- Defensive system UI
+    if self.defensiveSystem then
+        self.defensiveSystem:drawDefensiveUI(self.player, self.width - 300, 380)
     end
     
     -- Current weapon info
@@ -1062,32 +1075,32 @@ function Game:keypressed(key)
     elseif key == 'z' then
         -- Test status effects (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "paralyzed", 3.0)
+            self.statusEffectSystem:applyEffect(self.player, "paralyzed", 3.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'x' then
         -- Test status effects (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "slowed", 5.0)
+            self.statusEffectSystem:applyEffect(self.player, "slowed", 5.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'c' then
         -- Test status effects (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "weakness", 4.0)
+            self.statusEffectSystem:applyEffect(self.player, "weakness", 4.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'v' then
         -- Test armor break (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "armorBreak", 5.0)
+            self.statusEffectSystem:applyEffect(self.player, "armorBreak", 5.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'b' then
         -- Test bleeding (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "bleeding", 6.0)
+            self.statusEffectSystem:applyEffect(self.player, "bleeding", 6.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'u' then
         -- Test confused (for development)
         if self.statusEffectSystem and self.player then
-            self.statusEffectSystem:applyEffect(self.player, "confused", 8.0)
+            self.statusEffectSystem:applyEffect(self.player, "confused", 8.0, 1.0, self.defensiveSystem)
         end
     elseif key == 'k' then
         -- Cycle weapons forward

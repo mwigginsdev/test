@@ -324,7 +324,7 @@ function WeaponPatternSystem:checkCollision(bullet, target)
 end
 
 -- Apply bullet damage and effects
-function WeaponPatternSystem:applyBulletHit(bullet, target, statusEffectSystem)
+function WeaponPatternSystem:applyBulletHit(bullet, target, statusEffectSystem, defensiveSystem)
     if not bullet.active or not target then return 0 end
     
     local damage = bullet.damage
@@ -352,21 +352,23 @@ function WeaponPatternSystem:applyBulletHit(bullet, target, statusEffectSystem)
             statusEffectSystem:applyEffect(
                 target, 
                 bullet.statusEffect.type, 
-                bullet.statusEffect.duration
+                bullet.statusEffect.duration,
+                1.0,
+                defensiveSystem
             )
         end
     end
     
     -- Handle AoE damage
     if bullet.aoe then
-        damage = self:applyAoEDamage(bullet, target, statusEffectSystem)
+        damage = self:applyAoEDamage(bullet, target, statusEffectSystem, defensiveSystem)
     end
     
     return damage
 end
 
 -- Apply Area of Effect damage
-function WeaponPatternSystem:applyAoEDamage(bullet, primaryTarget, statusEffectSystem)
+function WeaponPatternSystem:applyAoEDamage(bullet, primaryTarget, statusEffectSystem, defensiveSystem)
     -- This would need to be integrated with the enemy manager
     -- For now, just return the primary damage
     local damage = bullet.damage

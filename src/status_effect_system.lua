@@ -68,13 +68,21 @@ function StatusEffectSystem:new()
 end
 
 -- Apply a status effect to an entity
-function StatusEffectSystem:applyEffect(entity, effectType, duration, intensity)
+function StatusEffectSystem:applyEffect(entity, effectType, duration, intensity, defensiveSystem)
     if not entity or not entity.id then return false end
     if not self.effectTypes[effectType] then return false end
     
     local effectDef = self.effectTypes[effectType]
     duration = duration or 5.0
     intensity = intensity or 1.0
+    
+    -- Check for defensive resistance
+    if defensiveSystem then
+        duration = defensiveSystem:checkStatusResistance(entity, effectType, duration)
+        if duration <= 0 then
+            return false -- Effect was completely resisted
+        end
+    end
     
     -- Initialize effects for entity if needed
     if not self.activeEffects[entity.id] then
