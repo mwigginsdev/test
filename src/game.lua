@@ -23,6 +23,8 @@ local ShipClassManager = require('src.ship_class_manager')
 local AbilitySystem = require('src.ability_system')
 local ManaSystem = require('src.mana_system')
 local DeathSystem = require('src.death_system')
+local StatusEffectSystem = require('src.status_effect_system')
+local WeaponPatternSystem = require('src.weapon_pattern_system')
 
 local Game = {}
 
@@ -65,6 +67,8 @@ function Game:init()
     self.abilitySystem = AbilitySystem:new()
     self.manaSystem = ManaSystem:new()
     self.deathSystem = DeathSystem:new()
+    self.statusEffectSystem = StatusEffectSystem:new()
+    self.weaponPatternSystem = WeaponPatternSystem:new()
     
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
@@ -94,6 +98,10 @@ function Game:startGame(ship)
         -- Mark as local player for death system (needs to be set before ability system)
         self.player.id = "local_player"
         self.player.name = ship.name
+        
+        -- Initialize weapon system
+        self.player.currentWeaponType = "basic"
+        self.player.weaponTypes = {"basic", "spreadGun", "burstRifle", "spiralCannon", "waveBeam", "piercingRail", "explosiveCannon", "poisonDart", "slowBeam"}
         
         -- Apply ship class if available
         if ship.classType then
@@ -508,6 +516,17 @@ function Game:update(dt)
     if self.multiplayerMode and self.playerManager then
         -- Player manager already updated players above
     else
+        -- Apply status effect modifiers before player update
+        if self.statusEffectSystem then
+            local speedModifier = self.statusEffectSystem:getSpeedModifier(self.player)
+            self.player.statusSpeedModifier = speedModifier
+            
+            -- Check if player can move or shoot
+            self.player.canMove = self.statusEffectSystem:canMove(self.player)
+            self.player.canShoot = self.statusEffectSystem:canShoot(self.player)
+            self.player.isConfused = self.statusEffectSystem:isConfused(self.player)
+        end
+        
         self.player:update(dt)
     end
     
@@ -527,6 +546,11 @@ function Game:update(dt)
     -- Update death system
     if self.deathSystem then
         self.deathSystem:update(dt)
+    end
+    
+    -- Update status effect system
+    if self.statusEffectSystem then
+        self.statusEffectSystem:update(dt)
     end
     self.bulletManager:update(dt, self.player)
     self.enemyManager:update(dt, self.player, self.bulletManager)
@@ -850,6 +874,31 @@ function Game:drawUI()
         self.deathSystem:drawDeathUI(self.player, self.width/2 - 100, self.height/2 - 50)
     end
     
+    -- Status effects UI
+    if self.statusEffectSystem then
+        self.statusEffectSystem:drawEffects(self.player, 10, 70)
+        
+        -- Status effect summary
+        local effectSummary = self.statusEffectSystem:getEffectSummary(self.player)
+        if effectSummary ~= "No effects" then
+            love.graphics.setColor(1, 1, 0)
+            love.graphics.print("Effects: " .. effectSummary, 220, 50, 0, 0.8, 0.8)
+        end
+    end
+    
+    -- Current weapon info
+    if self.weaponPatternSystem and self.player.currentWeaponType then
+        local weaponInfo = self.weaponPatternSystem.weaponTypes[self.player.currentWeaponType]
+        if weaponInfo then
+            love.graphics.setColor(0, 1, 0.5)
+            love.graphics.print("WEAPON: " .. weaponInfo.name, 10, 100, 0, 1.2, 1.2)
+            love.graphics.setColor(0.8, 0.8, 0.8)
+            love.graphics.print("DMG: " .. weaponInfo.damage .. " | Rate: " .. string.format("%.1f", weaponInfo.fireRate) .. "s", 10, 120, 0, 0.9, 0.9)
+            love.graphics.print("Special: " .. self.weaponPatternSystem:getWeaponSpecialText(weaponInfo), 10, 135, 0, 0.8, 0.8)
+            love.graphics.print("[J/K] Switch Weapons", 10, 150, 0, 0.7, 0.7)
+        end
+    end
+    
     -- Controls help
     love.graphics.setColor(0.7, 0.7, 0.7)
     love.graphics.print("CONTROLS: [I] Inventory  [TAB] Settings  [F] Dock  [1-4] Class Abilities", 10, self.height - 40, 0, 0.9, 0.9)
@@ -1009,6 +1058,71 @@ function Game:keypressed(key)
                     print("No ability in slot " .. abilityIndex)
                 end
             end
+        end
+    elseif key == 'z' then
+        -- Test status effects (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "paralyzed", 3.0)
+        end
+    elseif key == 'x' then
+        -- Test status effects (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "slowed", 5.0)
+        end
+    elseif key == 'c' then
+        -- Test status effects (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "weakness", 4.0)
+        end
+    elseif key == 'v' then
+        -- Test armor break (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "armorBreak", 5.0)
+        end
+    elseif key == 'b' then
+        -- Test bleeding (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "bleeding", 6.0)
+        end
+    elseif key == 'u' then
+        -- Test confused (for development)
+        if self.statusEffectSystem and self.player then
+            self.statusEffectSystem:applyEffect(self.player, "confused", 8.0)
+        end
+    elseif key == 'k' then
+        -- Cycle weapons forward
+        if self.player and self.player.weaponTypes then
+            local currentIndex = 1
+            for i, weaponType in ipairs(self.player.weaponTypes) do
+                if weaponType == self.player.currentWeaponType then
+                    currentIndex = i
+                    break
+                end
+            end
+            
+            local nextIndex = (currentIndex % #self.player.weaponTypes) + 1
+            self.player.currentWeaponType = self.player.weaponTypes[nextIndex]
+            
+            local weaponInfo = self.weaponPatternSystem.weaponTypes[self.player.currentWeaponType]
+            print("Switched to: " .. weaponInfo.name)
+        end
+    elseif key == 'j' then
+        -- Cycle weapons backward
+        if self.player and self.player.weaponTypes then
+            local currentIndex = 1
+            for i, weaponType in ipairs(self.player.weaponTypes) do
+                if weaponType == self.player.currentWeaponType then
+                    currentIndex = i
+                    break
+                end
+            end
+            
+            local prevIndex = currentIndex - 1
+            if prevIndex < 1 then prevIndex = #self.player.weaponTypes end
+            self.player.currentWeaponType = self.player.weaponTypes[prevIndex]
+            
+            local weaponInfo = self.weaponPatternSystem.weaponTypes[self.player.currentWeaponType]
+            print("Switched to: " .. weaponInfo.name)
         end
     end
 end
