@@ -13,7 +13,26 @@ function Player:new(x, y)
     player.health = 100
     player.maxHealth = 100
     
-    -- Weapon properties
+    -- RPG elements
+    player.level = 1
+    player.experience = 0
+    player.experienceToNext = 100
+    
+    -- Equipment slots
+    player.weapon1 = nil
+    player.weapon2 = nil
+    player.weapon3 = nil
+    player.shield = nil
+    player.engine = nil
+    
+    -- Crew slots
+    player.crew = {nil, nil, nil} -- 3 crew slots
+    
+    -- Inventory
+    player.inventory = {}
+    player.credits = 1000
+    
+    -- Base weapon properties (when no weapon equipped)
     player.fireRate = 0.15
     player.lastShot = 0
     player.weaponType = 1 -- 1 = single, 2 = spread, 3 = rapid
@@ -24,6 +43,83 @@ function Player:new(x, y)
     player.thrustParticles = {}
     
     return player
+end
+
+function Player:getEffectiveStats()
+    -- Calculate final stats based on equipment and crew
+    local stats = {
+        speed = self.speed,
+        fireRate = self.fireRate,
+        damage = 20, -- base damage
+        shieldCapacity = 0,
+        shieldRegen = 0
+    }
+    
+    -- Apply engine bonuses
+    if self.engine then
+        stats.speed = stats.speed + self.engine.stats.speedBonus
+    end
+    
+    -- Apply weapon stats (use best weapon for now)
+    local bestWeapon = self.weapon1 or self.weapon2 or self.weapon3
+    if bestWeapon then
+        stats.damage = bestWeapon.stats.damage
+        stats.fireRate = bestWeapon.stats.fireRate
+    end
+    
+    -- Apply shield stats
+    if self.shield then
+        stats.shieldCapacity = self.shield.stats.capacity
+        stats.shieldRegen = self.shield.stats.regenRate
+    end
+    
+    -- Apply crew bonuses
+    for _, crew in ipairs(self.crew) do
+        if crew then
+            if crew.stats.skill == "speed" then
+                stats.speed = stats.speed * (1 + crew.stats.bonus)
+            elseif crew.stats.skill == "damage" then
+                stats.damage = stats.damage * (1 + crew.stats.bonus)
+            elseif crew.stats.skill == "repair" then
+                stats.shieldRegen = stats.shieldRegen * (1 + crew.stats.bonus)
+            end
+        end
+    end
+    
+    return stats
+end
+
+function Player:equipItem(item, slot)
+    if item.type == "weapon" then
+        if slot == 1 then self.weapon1 = item
+        elseif slot == 2 then self.weapon2 = item
+        elseif slot == 3 then self.weapon3 = item
+        end
+    elseif item.type == "shield" then
+        self.shield = item
+    elseif item.type == "engine" then
+        self.engine = item
+    elseif item.type == "crew" then
+        if slot >= 1 and slot <= 3 then
+            self.crew[slot] = item
+        end
+    end
+end
+
+function Player:addToInventory(item)
+    table.insert(self.inventory, item)
+end
+
+function Player:gainExperience(amount)
+    self.experience = self.experience + amount
+    while self.experience >= self.experienceToNext do
+        self.experience = self.experience - self.experienceToNext
+        self.level = self.level + 1
+        self.experienceToNext = math.floor(self.experienceToNext * 1.5)
+        self.maxHealth = self.maxHealth + 20
+        self.health = self.maxHealth -- Full heal on level up
+        print("LEVEL UP! Now level " .. self.level)
+    end
 end
 
 function Player:update(dt)

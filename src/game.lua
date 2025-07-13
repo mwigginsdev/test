@@ -6,6 +6,12 @@ local EnemyManager = require('src.enemy_manager')
 local ParticleManager = require('src.particle_manager')
 local AudioManager = require('src.audio_manager')
 local SpaceStation = require('src.space_station')
+local Settings = require('src.settings')
+local ItemSystem = require('src.item')
+local Item = ItemSystem.Item
+local ItemGenerator = ItemSystem.ItemGenerator
+local Inventory = require('src.inventory')
+local Docking = require('src.docking')
 
 local Game = {}
 
@@ -24,11 +30,26 @@ function Game:init()
     self.spaceStations = {}
     self:generateSpaceStations()
     
+    -- Initialize settings
+    self.settings = Settings:new(self)
+    
+    -- Initialize inventory and docking
+    self.inventory = Inventory:new(self)
+    self.docking = Docking:new(self)
+    
     -- Game state
     self.score = 0
     self.gameOver = false
     self.paused = false
     self.autoShoot = false
+    
+    -- Custom crosshair
+    self.crosshair = {
+        enabled = true,
+        size = 20,
+        thickness = 2,
+        color = {0, 1, 1, 0.8}
+    }
     
     -- Camera system
     self.camera = {
@@ -81,6 +102,18 @@ function Game:generateSpaceStations()
     end
     
     print("Generated " .. numStations .. " space stations")
+end
+
+function Game:tryDocking()
+    -- Check if player is near any station
+    for _, station in ipairs(self.spaceStations) do
+        if station:isPlayerInDockingRange(self.player) then
+            self.docking:show(station)
+            print("Docked with " .. string.upper(station.type) .. " station")
+            return
+        end
+    end
+    print("No station in docking range")
 end
 
 function Game:update(dt)
@@ -169,52 +202,64 @@ function Game:checkCollisions()
                     self.score = self.score + enemy.points
                     self.particleManager:createExplosion(enemy.x, enemy.y, {1, 0.5, 0})
                     self.audioManager:playSound("explosion")
+                    
+                    -- Give experience for killing enemies
+                    self.player:gainExperience(enemy.points)
+                    
+                    -- Random item drop
+                    if math.random() < 0.1 then -- 10% drop chance
+                        local itemType = math.random(4)
+                        local item
+                        if itemType == 1 then
+                            item = ItemGenerator.generateWeapon(self.player.level)
+                        elseif itemType == 2 then
+                            item = ItemGenerator.generateShield(self.player.level)
+                        elseif itemType == 3 then
+                            item = ItemGenerator.generateEngine(self.player.level)
+                        else
+                            item = ItemGenerator.generateCrew(self.player.level)
+                        end
+                        self.player:addToInventory(item)
+                        print("Found: " .. item.name)
+                    end
                 end
             end
         end
     end
     
-    -- Enemy bullets vs player
-    for _, bullet in ipairs(self.bulletManager.enemyBullets) do
-        if self:checkCollision(bullet, self.player) then
-            self.player:takeDamage(bullet.damage)
-            bullet.active = false
-            self.particleManager:createExplosion(self.player.x, self.player.y, {0.1, 0.5, 0.9})
-            self.audioManager:playSound("hit")
-            
-            if self.player.health <= 0 then
-                self.gameOver = true
-                self.audioManager:stopMusic()
-            end
-        end
-    end
-    
-    -- Enemies vs player
-    for _, enemy in ipairs(self.enemyManager.enemies) do
-        if self:checkCollision(enemy, self.player) then
-            self.player:takeDamage(10)
-            enemy.health = 0
-            self.particleManager:createExplosion(self.player.x, self.player.y, {1, 0, 0})
-            self.audioManager:playSound("explosion")
-            
-            if self.player.health <= 0 then
-                self.gameOver = true
-                self.audioManager:stopMusic()
-            end
-        end
-    end
-    
-    -- Bullets vs space stations (they can be damaged)
-    for _, bullet in ipairs(self.bulletManager.enemyBullets) do
-        for _, station in ipairs(self.spaceStations) do
-            if self:checkCollision(bullet, station) then
-                station:takeDamage(bullet.damage)
+    -- Enemy bullets vs player (only if not docked)
+    if not self.docking.isVisible then
+        for _, bullet in ipairs(self.bulletManager.enemyBullets) do
+            if self:checkCollision(bullet, self.player) then
+                self.player:takeDamage(bullet.damage)
                 bullet.active = false
-                self.particleManager:createExplosion(station.x, station.y, {0.2, 0.8, 1.0})
+                self.particleManager:createExplosion(self.player.x, self.player.y, {0.1, 0.5, 0.9})
                 self.audioManager:playSound("hit")
+                
+                if self.player.health <= 0 then
+                    self.gameOver = true
+                    self.audioManager:stopMusic()
+                end
+            end
+        end
+        
+        -- Enemies vs player (only if not docked)
+        for _, enemy in ipairs(self.enemyManager.enemies) do
+            if self:checkCollision(enemy, self.player) then
+                self.player:takeDamage(10)
+                enemy.health = 0
+                self.particleManager:createExplosion(self.player.x, self.player.y, {1, 0, 0})
+                self.audioManager:playSound("explosion")
+                
+                if self.player.health <= 0 then
+                    self.gameOver = true
+                    self.audioManager:stopMusic()
+                end
             end
         end
     end
+    
+    -- Space stations are now invulnerable - bullets pass through them
 end
 
 function Game:checkCollision(obj1, obj2)
@@ -259,12 +304,65 @@ function Game:draw()
     if self.gameOver then
         self:drawGameOver()
     end
+    
+    -- Draw UI screens on top
+    self.settings:draw()
+    self.inventory:draw()
+    self.docking:draw()
+    
+    -- Draw custom crosshair
+    self:drawCrosshair()
+end
+
+function Game:drawCrosshair()
+    if not self.crosshair.enabled then return end
+    
+    local mouseX, mouseY = love.mouse.getPosition()
+    love.graphics.setColor(self.crosshair.color)
+    love.graphics.setLineWidth(self.crosshair.thickness)
+    
+    -- Draw crosshair lines
+    local halfSize = self.crosshair.size / 2
+    love.graphics.line(mouseX - halfSize, mouseY, mouseX + halfSize, mouseY) -- Horizontal
+    love.graphics.line(mouseX, mouseY - halfSize, mouseX, mouseY + halfSize) -- Vertical
+    
+    -- Draw center dot
+    love.graphics.circle("fill", mouseX, mouseY, 2)
+    
+    -- Reset line width
+    love.graphics.setLineWidth(1)
 end
 
 function Game:drawUI()
+    -- Left side HUD
     love.graphics.setColor(0, 1, 1) -- Cyan sci-fi color
     love.graphics.print("Score: " .. self.score, 10, 10, 0, 2, 2)
     love.graphics.print("Health: " .. self.player.health, 10, 40, 0, 2, 2)
+    
+    -- RPG elements - right side
+    local rightX = self.width - 300
+    love.graphics.setColor(1, 1, 0) -- Yellow for RPG elements
+    love.graphics.print("LEVEL: " .. self.player.level, rightX, 10, 0, 1.5, 1.5)
+    love.graphics.print("EXP: " .. self.player.experience .. "/" .. self.player.experienceToNext, rightX, 35, 0, 1, 1)
+    love.graphics.print("CREDITS: " .. self.player.credits, rightX, 55, 0, 1, 1)
+    
+    -- Equipment slots
+    love.graphics.setColor(0.8, 0.8, 0.8)
+    love.graphics.print("WEAPONS:", rightX, 85, 0, 1, 1)
+    love.graphics.print("1: " .. (self.player.weapon1 and self.player.weapon1.name or "EMPTY"), rightX + 10, 105, 0, 0.8, 0.8)
+    love.graphics.print("2: " .. (self.player.weapon2 and self.player.weapon2.name or "EMPTY"), rightX + 10, 120, 0, 0.8, 0.8)
+    love.graphics.print("3: " .. (self.player.weapon3 and self.player.weapon3.name or "EMPTY"), rightX + 10, 135, 0, 0.8, 0.8)
+    
+    love.graphics.print("SHIELD: " .. (self.player.shield and self.player.shield.name or "NONE"), rightX, 155, 0, 0.9, 0.9)
+    love.graphics.print("ENGINE: " .. (self.player.engine and self.player.engine.name or "BASIC"), rightX, 175, 0, 0.9, 0.9)
+    
+    -- Crew slots
+    love.graphics.setColor(0.7, 1, 0.7)
+    love.graphics.print("CREW:", rightX, 200, 0, 1, 1)
+    for i = 1, 3 do
+        local crew = self.player.crew[i]
+        love.graphics.print(i .. ": " .. (crew and crew.name or "VACANT"), rightX + 10, 215 + (i-1)*15, 0, 0.8, 0.8)
+    end
     
     -- Auto-shoot indicator
     if self.autoShoot then
@@ -287,6 +385,11 @@ function Game:drawUI()
     love.graphics.setColor(self.audioManager.sfxEnabled and {0, 1, 0} or {0.5, 0.5, 0.5})
     love.graphics.print("SFX: " .. (self.audioManager.sfxEnabled and "ON" or "OFF"), 10, 180, 0, 1, 1)
     
+    -- Controls help
+    love.graphics.setColor(0.7, 0.7, 0.7)
+    love.graphics.print("CONTROLS: [I] Inventory  [TAB] Settings  [F] Dock", 10, self.height - 40, 0, 0.9, 0.9)
+    love.graphics.print("WASD Move  QE Rotate  [G] Auto-shoot  [P] Pause", 10, self.height - 25, 0, 0.9, 0.9)
+    
     -- Health bar
     love.graphics.setColor(0.2, 0.2, 0.2)
     love.graphics.rectangle('fill', 10, 70, 200, 20)
@@ -304,7 +407,7 @@ function Game:drawUI()
         if distance <= station.commRange then
             love.graphics.setColor(station.color[1], station.color[2], station.color[3], 1.0)
             if distance <= station.dockingRange then
-                love.graphics.print("[DOCK] " .. string.upper(station.type) .. " STATION", 10, yOffset, 0, 1.2, 1.2)
+                love.graphics.print("[F] DOCK: " .. string.upper(station.type) .. " STATION", 10, yOffset, 0, 1.2, 1.2)
             else
                 love.graphics.print("[COMM] " .. string.upper(station.type) .. " STATION", 10, yOffset, 0, 1, 1)
             end
@@ -334,8 +437,26 @@ function Game:drawGameOver()
 end
 
 function Game:keypressed(key)
+    -- UI screens handle their own input
+    if self.settings.isVisible then
+        self.settings:keypressed(key)
+        return
+    elseif self.inventory.isVisible then
+        self.inventory:keypressed(key)
+        return
+    elseif self.docking.isVisible then
+        self.docking:keypressed(key)
+        return
+    end
+    
     if key == 'escape' then
         love.event.quit()
+    elseif key == 'tab' then
+        self.settings:toggle()
+    elseif key == 'i' then
+        self.inventory:toggle()
+    elseif key == 'f' then
+        self:tryDocking()
     elseif key == 'p' then
         self.paused = not self.paused
         if self.paused then

@@ -30,6 +30,11 @@ function SpaceStation:new(x, y, stationType)
     station.dockedShips = {}
     station.dockingRange = 120
     
+    -- Station inventory for trading/hiring
+    station.inventory = {}
+    station.availableCrew = {}
+    station:generateStationInventory()
+    
     -- Station modules (visual components)
     station.modules = station:generateModules()
     
@@ -257,6 +262,132 @@ function SpaceStation:canProvideService(serviceName)
         end
     end
     return false
+end
+
+function SpaceStation:generateStationInventory()
+    -- Generate items based on station type
+    local ItemSystem = require('src.item')
+    local ItemGenerator = ItemSystem.ItemGenerator
+    
+    if self.type == "trading" then
+        -- Trading stations have more variety
+        for i = 1, 8 do
+            local itemType = math.random(3)
+            local item
+            if itemType == 1 then
+                item = ItemGenerator.generateWeapon(math.random(1, 5))
+            elseif itemType == 2 then
+                item = ItemGenerator.generateShield(math.random(1, 5))
+            else
+                item = ItemGenerator.generateEngine(math.random(1, 5))
+            end
+            table.insert(self.inventory, item)
+        end
+        
+        -- Trading stations have crew for hire
+        for i = 1, 5 do
+            local crew = ItemGenerator.generateCrew(math.random(1, 3))
+            table.insert(self.availableCrew, crew)
+        end
+        
+    elseif self.type == "military" then
+        -- Military stations focus on weapons
+        for i = 1, 6 do
+            local item = ItemGenerator.generateWeapon(math.random(2, 6))
+            table.insert(self.inventory, item)
+        end
+        
+        -- Military crew
+        for i = 1, 3 do
+            local crew = ItemGenerator.generateCrew(math.random(1, 4))
+            if crew.stats.skill == "damage" or crew.stats.skill == "repair" then
+                table.insert(self.availableCrew, crew)
+            end
+        end
+        
+    elseif self.type == "research" then
+        -- Research stations have advanced items
+        for i = 1, 4 do
+            local itemType = math.random(3)
+            local item
+            if itemType == 1 then
+                item = ItemGenerator.generateShield(math.random(3, 7))
+            elseif itemType == 2 then
+                item = ItemGenerator.generateEngine(math.random(3, 7))
+            else
+                item = ItemGenerator.generateWeapon(math.random(3, 7))
+            end
+            table.insert(self.inventory, item)
+        end
+        
+        -- Research crew (engineers, navigators)
+        for i = 1, 4 do
+            local crew = ItemGenerator.generateCrew(math.random(2, 5))
+            if crew.stats.skill == "repair" or crew.stats.skill == "range" then
+                table.insert(self.availableCrew, crew)
+            end
+        end
+        
+    elseif self.type == "mining" then
+        -- Mining stations have basic items and engines
+        for i = 1, 5 do
+            local itemType = math.random(2)
+            local item
+            if itemType == 1 then
+                item = ItemGenerator.generateEngine(math.random(1, 4))
+            else
+                item = ItemGenerator.generateWeapon(math.random(1, 3))
+            end
+            table.insert(self.inventory, item)
+        end
+        
+        -- Mining crew (engineers, pilots)
+        for i = 1, 3 do
+            local crew = ItemGenerator.generateCrew(math.random(1, 3))
+            if crew.stats.skill == "repair" or crew.stats.skill == "speed" then
+                table.insert(self.availableCrew, crew)
+            end
+        end
+    end
+end
+
+function SpaceStation:hireCrew(crewIndex, player)
+    if crewIndex < 1 or crewIndex > #self.availableCrew then
+        return false, "Invalid crew member"
+    end
+    
+    local crew = self.availableCrew[crewIndex]
+    if player.credits < crew.stats.hiringCost then
+        return false, "Insufficient credits"
+    end
+    
+    -- Find empty crew slot
+    for i = 1, 3 do
+        if not player.crew[i] then
+            player.credits = player.credits - crew.stats.hiringCost
+            player.crew[i] = crew
+            table.remove(self.availableCrew, crewIndex)
+            return true, "Crew member hired"
+        end
+    end
+    
+    return false, "No empty crew slots"
+end
+
+function SpaceStation:buyItem(itemIndex, player)
+    if itemIndex < 1 or itemIndex > #self.inventory then
+        return false, "Invalid item"
+    end
+    
+    local item = self.inventory[itemIndex]
+    if player.credits < item.value then
+        return false, "Insufficient credits"
+    end
+    
+    player.credits = player.credits - item.value
+    player:addToInventory(item)
+    table.remove(self.inventory, itemIndex)
+    return true, "Item purchased"
 end
 
 return SpaceStation
