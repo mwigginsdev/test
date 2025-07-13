@@ -80,7 +80,7 @@ function Docking:activateSelectedItem()
             if self.game.player.credits >= cost then
                 self.game.player.credits = self.game.player.credits - cost
                 self.game.player.health = self.game.player.maxHealth
-                print("Ship repaired! Cost: " .. cost .. " credits")
+                print("Ship repaired! Cost: " .. cost .. " cred")
             else
                 print("Insufficient credits for repair")
             end
@@ -120,7 +120,7 @@ function Docking:draw()
     
     -- Player info
     love.graphics.setColor(1, 1, 0)
-    love.graphics.print("CREDITS: " .. self.game.player.credits, panelX + panelWidth - 200, panelY + 20, 0, 1.2, 1.2)
+    love.graphics.print("CREDITS: " .. self.game.player.credits .. " cred", panelX + panelWidth - 200, panelY + 20, 0, 1.2, 1.2)
     love.graphics.print("HEALTH: " .. self.game.player.health .. "/" .. self.game.player.maxHealth, panelX + panelWidth - 200, panelY + 45, 0, 1, 1)
     
     -- Tab navigation
@@ -166,7 +166,7 @@ function Docking:draw()
             if service == "repair" then
                 local cost = math.floor((self.game.player.maxHealth - self.game.player.health) * 2)
                 love.graphics.setColor(1, 1, 0)
-                love.graphics.print("Cost: " .. cost .. " credits", panelX + 300, y, 0, 1, 1)
+                love.graphics.print("Cost: " .. cost .. " cred", panelX + 300, y, 0, 1, 1)
             end
         end
         
@@ -194,7 +194,7 @@ function Docking:draw()
             
             -- Price
             love.graphics.setColor(1, 1, 0)
-            love.graphics.print("₡" .. item.value, panelX + 600, y, 0, 0.9, 0.9)
+            love.graphics.print(item.value .. " cred", panelX + 600, y, 0, 0.9, 0.9)
             
             -- Affordability indicator
             if self.game.player.credits < item.value then
@@ -227,7 +227,7 @@ function Docking:draw()
             
             -- Hiring cost
             love.graphics.setColor(1, 1, 0)
-            love.graphics.print("₡" .. crew.stats.hiringCost, panelX + 500, y, 0, 0.9, 0.9)
+            love.graphics.print(crew.stats.hiringCost .. " cred", panelX + 500, y, 0, 0.9, 0.9)
             
             -- Affordability indicator
             if self.game.player.credits < crew.stats.hiringCost then

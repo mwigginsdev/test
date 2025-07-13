@@ -37,6 +37,47 @@ A fast-paced bullet hell game built with LÖVE2D (Lua) featuring sci-fi themes, 
    love sci-fi-bullet-hell/
    ```
 
+## Testing
+
+This project includes comprehensive unit tests to ensure code quality and functionality.
+
+### Running Tests
+
+To run the unit tests, you need Lua installed on your system:
+
+```bash
+cd sci-fi-bullet-hell/tests
+lua test_game.lua
+```
+
+### Test Coverage
+
+The test suite covers:
+- **Game State Management**: Menu navigation, ship creation, gameplay transitions
+- **Player Systems**: Character creation, leveling, inventory management, equipment
+- **Item Generation**: Weapons, shields, engines, crew with proper rarity scaling
+- **Space Station Features**: Trading, crew hiring, services, inventory management
+- **Core Game Mechanics**: Collision detection, progression systems, credit economy
+
+### Writing New Tests
+
+When adding new features, create corresponding test cases in `tests/test_game.lua`. Follow the existing patterns:
+
+```lua
+TestNewFeature = {}
+
+function TestNewFeature:setUp()
+    -- Initialize test data
+end
+
+function TestNewFeature:testFeatureFunction()
+    -- Test assertions using luaunit functions
+    luaunit.assertNotNil(value)
+    luaunit.assertEquals(expected, actual)
+    luaunit.assertTrue(condition)
+end
+```
+
 ## Game Mechanics
 
 - **Health System**: Player starts with 100 health, enemies deal varying damage

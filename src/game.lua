@@ -12,12 +12,40 @@ local Item = ItemSystem.Item
 local ItemGenerator = ItemSystem.ItemGenerator
 local Inventory = require('src.inventory')
 local Docking = require('src.docking')
+local StartMenu = require('src.start_menu')
+local ShipCreation = require('src.ship_creation')
 
 local Game = {}
 
 function Game:init()
     self.width = love.graphics.getWidth()
     self.height = love.graphics.getHeight()
+    
+    -- Game state
+    self.gameState = "menu" -- "menu", "playing", "ship_creation"
+    self.currentShip = nil
+    
+    -- Initialize menus
+    self.startMenu = StartMenu:new()
+    self.shipCreation = ShipCreation:new()
+    
+    -- Initialize game systems (will be properly set up when starting a game)
+    self.player = nil
+    self.bulletManager = nil
+    self.enemyManager = nil
+    self.particleManager = nil
+    self.audioManager = nil
+    self.spaceStations = {}
+    self.settings = nil
+    self.inventory = nil
+    self.docking = nil
+    
+    print("Sci-Fi Bullet Hell Game Initialized!")
+end
+
+function Game:startGame(ship)
+    self.gameState = "playing"
+    self.currentShip = ship
     
     -- Initialize game systems
     self.player = Player:new(self.width / 2, self.height - 100)
@@ -26,14 +54,28 @@ function Game:init()
     self.particleManager = ParticleManager:new()
     self.audioManager = AudioManager:new()
     
+    -- Apply ship stats to player
+    if ship then
+        self.player.health = ship.health
+        self.player.maxHealth = ship.maxHealth
+        self.player.speed = ship.speed
+        self.player.fireRate = ship.fireRate
+        self.player.level = ship.level or 1
+        self.player.credits = ship.credits or 1000
+        self.player.experience = ship.experience or 0
+        self.player.experienceToNext = ship.experienceToNext or 100
+        
+        -- Apply ship appearance
+        self.player.shipShape = ship.shape or "triangle"
+        self.player.shipColor = ship.color or {0.2, 0.8, 1.0}
+    end
+    
     -- Initialize space stations
     self.spaceStations = {}
     self:generateSpaceStations()
     
-    -- Initialize settings
+    -- Initialize UI systems
     self.settings = Settings:new(self)
-    
-    -- Initialize inventory and docking
     self.inventory = Inventory:new(self)
     self.docking = Docking:new(self)
     
@@ -59,8 +101,8 @@ function Game:init()
         targetY = 0,
         rotation = 0,
         targetRotation = 0,
-        smoothing = 5, -- Camera smoothing factor
-        rotationSpeed = 2 -- Rotation speed (radians per second)
+        smoothing = 5,
+        rotationSpeed = 2
     }
     
     -- Background stars
@@ -69,7 +111,15 @@ function Game:init()
     -- Start background music
     self.audioManager:startMusic()
     
-    print("Sci-Fi Bullet Hell Game Initialized!")
+    print("Game started with ship: " .. (ship.name or "Unknown"))
+end
+
+function Game:returnToMenu()
+    self.gameState = "menu"
+    self.startMenu:show()
+    if self.audioManager then
+        self.audioManager:stopMusic()
+    end
 end
 
 function Game:generateStars()
@@ -79,7 +129,7 @@ function Game:generateStars()
             x = math.random(0, self.width),
             y = math.random(0, self.height),
             speed = math.random(20, 80),
-            brightness = math.random(0.3, 1.0)
+            brightness = math.random() * 0.7 + 0.3
         })
     end
 end
@@ -117,7 +167,11 @@ function Game:tryDocking()
 end
 
 function Game:update(dt)
-    if self.gameOver or self.paused then
+    if self.gameState == "menu" or self.gameState == "ship_creation" then
+        return
+    end
+    
+    if self.gameOver or self.paused or not self.player then
         return
     end
     
@@ -206,6 +260,11 @@ function Game:checkCollisions()
                     -- Give experience for killing enemies
                     self.player:gainExperience(enemy.points)
                     
+                    -- Credit drop
+                    local creditDrop = math.random(50, 200)
+                    self.player.credits = self.player.credits + creditDrop
+                    print("Earned " .. creditDrop .. " cred")
+                    
                     -- Random item drop
                     if math.random() < 0.1 then -- 10% drop chance
                         local itemType = math.random(4)
@@ -237,8 +296,7 @@ function Game:checkCollisions()
                 self.audioManager:playSound("hit")
                 
                 if self.player.health <= 0 then
-                    self.gameOver = true
-                    self.audioManager:stopMusic()
+                    self:returnToMenu()
                 end
             end
         end
@@ -252,8 +310,7 @@ function Game:checkCollisions()
                 self.audioManager:playSound("explosion")
                 
                 if self.player.health <= 0 then
-                    self.gameOver = true
-                    self.audioManager:stopMusic()
+                    self:returnToMenu()
                 end
             end
         end
@@ -270,6 +327,22 @@ function Game:checkCollision(obj1, obj2)
 end
 
 function Game:draw()
+    if self.gameState == "menu" then
+        self.startMenu:draw()
+        -- Draw settings overlay if open from menu
+        if self.settings and self.settings.isVisible then
+            self.settings:draw()
+        end
+        return
+    elseif self.gameState == "ship_creation" then
+        self.shipCreation:draw()
+        return
+    end
+    
+    if not self.player then
+        return
+    end
+    
     -- Apply camera transform for world objects
     love.graphics.push()
     
@@ -336,15 +409,14 @@ end
 function Game:drawUI()
     -- Left side HUD
     love.graphics.setColor(0, 1, 1) -- Cyan sci-fi color
-    love.graphics.print("Score: " .. self.score, 10, 10, 0, 2, 2)
-    love.graphics.print("Health: " .. self.player.health, 10, 40, 0, 2, 2)
+    love.graphics.print("Health: " .. self.player.health, 10, 10, 0, 2, 2)
     
     -- RPG elements - right side
     local rightX = self.width - 300
     love.graphics.setColor(1, 1, 0) -- Yellow for RPG elements
     love.graphics.print("LEVEL: " .. self.player.level, rightX, 10, 0, 1.5, 1.5)
     love.graphics.print("EXP: " .. self.player.experience .. "/" .. self.player.experienceToNext, rightX, 35, 0, 1, 1)
-    love.graphics.print("CREDITS: " .. self.player.credits, rightX, 55, 0, 1, 1)
+    love.graphics.print("CREDITS: " .. self.player.credits .. " cred", rightX, 55, 0, 1, 1)
     
     -- Equipment slots
     love.graphics.setColor(0.8, 0.8, 0.8)
@@ -392,12 +464,12 @@ function Game:drawUI()
     
     -- Health bar
     love.graphics.setColor(0.2, 0.2, 0.2)
-    love.graphics.rectangle('fill', 10, 70, 200, 20)
+    love.graphics.rectangle('fill', 10, 40, 200, 20)
     love.graphics.setColor(0, 1, 0)
     local healthPercent = self.player.health / self.player.maxHealth
-    love.graphics.rectangle('fill', 10, 70, 200 * healthPercent, 20)
+    love.graphics.rectangle('fill', 10, 40, 200 * healthPercent, 20)
     love.graphics.setColor(1, 1, 1)
-    love.graphics.rectangle('line', 10, 70, 200, 20)
+    love.graphics.rectangle('line', 10, 40, 200, 20)
     
     -- Space station proximity indicators
     local yOffset = 210
@@ -437,14 +509,49 @@ function Game:drawGameOver()
 end
 
 function Game:keypressed(key)
-    -- UI screens handle their own input
-    if self.settings.isVisible then
+    -- Handle menu states
+    if self.gameState == "menu" then
+        -- Settings screen has priority when open
+        if self.settings and self.settings.isVisible then
+            self.settings:keypressed(key)
+            return
+        end
+        
+        local result, data = self.startMenu:keypressed(key)
+        if result == "create_ship" then
+            self.gameState = "ship_creation"
+            self.shipCreation:show(data)
+        elseif result == "load_ship" then
+            self:startGame(data)
+        elseif result == "settings" then
+            -- Initialize temporary settings if needed
+            if not self.settings then
+                self.settings = Settings:new(self)
+            end
+            self.settings:toggle()
+        elseif result == "exit" then
+            love.event.quit()
+        end
+        return
+    elseif self.gameState == "ship_creation" then
+        local result, data = self.shipCreation:keypressed(key)
+        if result == "create" then
+            self:startGame(data)
+        elseif result == "cancel" then
+            self.gameState = "menu"
+            self.shipCreation:hide()
+        end
+        return
+    end
+    
+    -- Game UI screens handle their own input
+    if self.settings and self.settings.isVisible then
         self.settings:keypressed(key)
         return
-    elseif self.inventory.isVisible then
+    elseif self.inventory and self.inventory.isVisible then
         self.inventory:keypressed(key)
         return
-    elseif self.docking.isVisible then
+    elseif self.docking and self.docking.isVisible then
         self.docking:keypressed(key)
         return
     end

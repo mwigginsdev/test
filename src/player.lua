@@ -42,6 +42,10 @@ function Player:new(x, y)
     player.rotation = 0 -- Player's facing direction
     player.thrustParticles = {}
     
+    -- Ship appearance (set from ship creation)
+    player.shipShape = "triangle" -- default
+    player.shipColor = {0.2, 0.8, 1.0} -- default cyan
+    
     return player
 end
 
@@ -246,29 +250,87 @@ function Player:draw()
         love.graphics.circle('fill', particle.x - self.x, particle.y - self.y, 2)
     end
     
-    -- Draw ship body (sci-fi triangle)
-    love.graphics.setColor(0.7, 0.9, 1) -- Light blue
-    love.graphics.polygon('fill', 
-        0, -self.radius,        -- Top point (forward)
-        -self.radius*0.6, self.radius*0.8,   -- Bottom left
-        self.radius*0.6, self.radius*0.8     -- Bottom right
-    )
+    -- Draw ship based on selected shape and color
+    love.graphics.setColor(self.shipColor[1], self.shipColor[2], self.shipColor[3])
+    self:drawShipShape()
     
     -- Draw ship core
-    love.graphics.setColor(0, 1, 1) -- Cyan
+    love.graphics.setColor(self.shipColor[1] * 0.7, self.shipColor[2] * 0.7, self.shipColor[3] * 0.7)
     love.graphics.circle('fill', 0, 0, self.radius * 0.3)
     
     -- Draw ship outline
     love.graphics.setColor(1, 1, 1)
     love.graphics.setLineWidth(2)
-    love.graphics.polygon('line', 
-        0, -self.radius,
-        -self.radius*0.6, self.radius*0.8,
-        self.radius*0.6, self.radius*0.8
-    )
+    self:drawShipShapeOutline()
     
     love.graphics.pop()
     love.graphics.setColor(1, 1, 1)
+end
+
+function Player:drawShipShape()
+    if self.shipShape == "triangle" then
+        love.graphics.polygon('fill', 
+            0, -self.radius,        -- Top point (forward)
+            -self.radius*0.6, self.radius*0.8,   -- Bottom left
+            self.radius*0.6, self.radius*0.8     -- Bottom right
+        )
+    elseif self.shipShape == "arrow" then
+        love.graphics.polygon('fill',
+            0, -self.radius,           -- Front point
+            -self.radius*0.4, 0,       -- Left middle
+            -self.radius*0.7, self.radius,  -- Left back
+            self.radius*0.7, self.radius,   -- Right back
+            self.radius*0.4, 0         -- Right middle
+        )
+    elseif self.shipShape == "pentagon" then
+        local points = {}
+        for i = 0, 4 do
+            local angle = (i / 5) * 2 * math.pi - math.pi/2
+            table.insert(points, math.cos(angle) * self.radius)
+            table.insert(points, math.sin(angle) * self.radius)
+        end
+        love.graphics.polygon('fill', points)
+    elseif self.shipShape == "diamond" then
+        love.graphics.polygon('fill',
+            0, -self.radius,           -- Top
+            self.radius*0.7, 0,        -- Right
+            0, self.radius,            -- Bottom
+            -self.radius*0.7, 0        -- Left
+        )
+    end
+end
+
+function Player:drawShipShapeOutline()
+    if self.shipShape == "triangle" then
+        love.graphics.polygon('line', 
+            0, -self.radius,
+            -self.radius*0.6, self.radius*0.8,
+            self.radius*0.6, self.radius*0.8
+        )
+    elseif self.shipShape == "arrow" then
+        love.graphics.polygon('line',
+            0, -self.radius,
+            -self.radius*0.4, 0,
+            -self.radius*0.7, self.radius,
+            self.radius*0.7, self.radius,
+            self.radius*0.4, 0
+        )
+    elseif self.shipShape == "pentagon" then
+        local points = {}
+        for i = 0, 4 do
+            local angle = (i / 5) * 2 * math.pi - math.pi/2
+            table.insert(points, math.cos(angle) * self.radius)
+            table.insert(points, math.sin(angle) * self.radius)
+        end
+        love.graphics.polygon('line', points)
+    elseif self.shipShape == "diamond" then
+        love.graphics.polygon('line',
+            0, -self.radius,
+            self.radius*0.7, 0,
+            0, self.radius,
+            -self.radius*0.7, 0
+        )
+    end
 end
 
 return Player

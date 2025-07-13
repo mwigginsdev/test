@@ -182,7 +182,7 @@ function Inventory:draw()
         
         -- Item value
         love.graphics.setColor(1, 1, 0)
-        love.graphics.print("₡" .. item.value, panelX + 400, y, 0, 0.8, 0.8)
+        love.graphics.print(item.value .. " cred", panelX + 400, y, 0, 0.8, 0.8)
     end
     
     -- Controls help
