@@ -1,5 +1,7 @@
 -- Ship creation screen
 
+local ShipClassManager = require('src.ship_class_manager')
+
 local ShipCreation = {}
 ShipCreation.__index = ShipCreation
 
@@ -7,39 +9,16 @@ function ShipCreation:new()
     local creation = setmetatable({}, ShipCreation)
     
     creation.isVisible = false
-    creation.selectedStyle = 1
+    creation.selectedClass = 1
     creation.shipName = "NEW SHIP"
     creation.inputMode = false -- true when typing name
-    creation.shipStyles = {
-        {
-            name = "FIGHTER",
-            description = "Balanced combat vessel",
-            shape = "triangle",
-            color = {0.2, 0.8, 1.0},
-            stats = {speed = 300, health = 100, fireRate = 0.15}
-        },
-        {
-            name = "INTERCEPTOR", 
-            description = "Fast and agile",
-            shape = "arrow",
-            color = {1.0, 0.3, 0.3},
-            stats = {speed = 400, health = 80, fireRate = 0.12}
-        },
-        {
-            name = "GUNSHIP",
-            description = "Heavy weapons platform",
-            shape = "pentagon",
-            color = {1.0, 0.8, 0.2},
-            stats = {speed = 250, health = 140, fireRate = 0.2}
-        },
-        {
-            name = "SCOUT",
-            description = "Exploration specialist",
-            shape = "diamond",
-            color = {0.3, 1.0, 0.3},
-            stats = {speed = 350, health = 90, fireRate = 0.18}
-        }
-    }
+    creation.playerLevel = 1 -- For determining unlocked classes
+    
+    -- Initialize ship class manager
+    creation.classManager = ShipClassManager:new()
+    
+    -- Get available classes
+    creation.availableClasses = creation.classManager:getAvailableClasses(creation.playerLevel)
     
     return creation
 end
@@ -47,9 +26,12 @@ end
 function ShipCreation:show(slotNumber)
     self.isVisible = true
     self.slotNumber = slotNumber
-    self.selectedStyle = 1
+    self.selectedClass = 1
     self.shipName = "SHIP " .. slotNumber
     self.inputMode = false
+    
+    -- Refresh available classes
+    self.availableClasses = self.classManager:getAvailableClasses(self.playerLevel)
 end
 
 function ShipCreation:hide()
@@ -71,9 +53,9 @@ function ShipCreation:keypressed(key)
         end
     else
         if key == "left" then
-            self.selectedStyle = math.max(1, self.selectedStyle - 1)
+            self.selectedClass = math.max(1, self.selectedClass - 1)
         elseif key == "right" then
-            self.selectedStyle = math.min(#self.shipStyles, self.selectedStyle + 1)
+            self.selectedClass = math.min(#self.availableClasses, self.selectedClass + 1)
         elseif key == "return" or key == "space" then
             return self:createShip()
         elseif key == "n" then
@@ -87,21 +69,28 @@ function ShipCreation:keypressed(key)
 end
 
 function ShipCreation:createShip()
-    local style = self.shipStyles[self.selectedStyle]
+    local selectedClassData = self.availableClasses[self.selectedClass]
+    
+    if not selectedClassData.unlocked then
+        print("Class not unlocked!")
+        return nil
+    end
+    
+    local classInstance = selectedClassData.class
     local newShip = {
         name = self.shipName,
-        style = self.selectedStyle,
+        classType = selectedClassData.type,
         level = 1,
         credits = 1000,
         exists = true,
-        health = style.stats.health,
-        maxHealth = style.stats.health,
-        speed = style.stats.speed,
-        fireRate = style.stats.fireRate,
+        health = classInstance.baseStats.health,
+        maxHealth = classInstance.baseStats.maxHealth,
+        speed = classInstance.baseStats.speed,
+        fireRate = classInstance.baseStats.fireRate,
         experience = 0,
         experienceToNext = 100,
-        color = style.color,
-        shape = style.shape
+        color = classInstance.shipColor,
+        shape = classInstance.shipShape
     }
     
     return "create", newShip
@@ -135,44 +124,60 @@ function ShipCreation:draw()
         love.graphics.print("_", 260 + love.graphics.getFont():getWidth(self.shipName) * 1.2, 122, 0, 1.2, 1.2)
     end
     
-    -- Ship styles
+    -- Ship classes
     love.graphics.setColor(1, 1, 1)
     love.graphics.print("SHIP CLASS:", 100, 180, 0, 1.5, 1.5)
     
     local startX = 150
-    local styleWidth = 200
-    for i, style in ipairs(self.shipStyles) do
-        local x = startX + (i-1) * (styleWidth + 20)
+    local classWidth = 180
+    for i, classData in ipairs(self.availableClasses) do
+        local x = startX + (i-1) * (classWidth + 15)
         local y = 220
-        local isSelected = (i == self.selectedStyle)
+        local isSelected = (i == self.selectedClass)
+        local isUnlocked = classData.unlocked
         
         -- Selection highlight
         if isSelected then
             love.graphics.setColor(0.2, 0.6, 0.8, 0.5)
-            love.graphics.rectangle("fill", x - 10, y - 10, styleWidth, 200)
+            love.graphics.rectangle("fill", x - 10, y - 10, classWidth, 200)
         end
         
-        -- Border
-        love.graphics.setColor(isSelected and {0, 1, 1} or {0.5, 0.5, 0.5})
-        love.graphics.rectangle("line", x - 10, y - 10, styleWidth, 200)
+        -- Border (different color for locked classes)
+        local borderColor = isUnlocked and {1, 1, 1} or {0.5, 0.5, 0.5}
+        love.graphics.setColor(borderColor)
+        love.graphics.rectangle("line", x - 10, y - 10, classWidth, 200)
         
-        -- Ship preview
-        love.graphics.setColor(style.color)
-        self:drawShipShape(x + styleWidth/2, y + 50, style.shape, 30)
+        -- Ship class preview
+        local class = classData.class
+        if class then
+            love.graphics.setColor(class.shipColor)
+            self:drawShipShape(x + classWidth/2, y + 50, class.shipShape, 25)
+        end
         
-        -- Style name
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(style.name, x, y + 80, 0, 1.2, 1.2)
+        -- Class name
+        local nameColor = isUnlocked and {1, 1, 1} or {0.5, 0.5, 0.5}
+        love.graphics.setColor(nameColor)
+        love.graphics.print(class and class.name or "UNKNOWN", x, y + 80, 0, 1.1, 1.1)
         
-        -- Description
-        love.graphics.setColor(0.8, 0.8, 0.8)
-        love.graphics.print(style.description, x, y + 105, 0, 0.9, 0.9)
+        -- Lock indicator
+        if not isUnlocked then
+            love.graphics.setColor(1, 0.5, 0)
+            love.graphics.print("LOCKED", x, y + 100, 0, 0.9, 0.9)
+            love.graphics.print("Req Lv " .. (classData.requiresLevel or 1), x, y + 115, 0, 0.8, 0.8)
+        else
+            -- Description
+            love.graphics.setColor(0.8, 0.8, 0.8)
+            local desc = class and class.description or ""
+            love.graphics.printf(desc, x, y + 100, classWidth - 10, "left", 0, 0.8, 0.8)
+        end
         
-        -- Stats
-        love.graphics.setColor(0.7, 0.7, 0.7)
-        love.graphics.print("SPD: " .. style.stats.speed, x, y + 130, 0, 0.8, 0.8)
-        love.graphics.print("HP: " .. style.stats.health, x, y + 145, 0, 0.8, 0.8)
-        love.graphics.print("FR: " .. string.format("%.2f", style.stats.fireRate), x, y + 160, 0, 0.8, 0.8)
+        -- Stats (only for unlocked classes)
+        if isUnlocked and class then
+            love.graphics.setColor(0.7, 0.7, 0.7)
+            love.graphics.print("HP: " .. class.baseStats.health, x, y + 140, 0, 0.7, 0.7)
+            love.graphics.print("SPD: " .. class.baseStats.speed, x, y + 155, 0, 0.7, 0.7)
+            love.graphics.print("ATK: " .. class.baseStats.attack, x, y + 170, 0, 0.7, 0.7)
+        end
     end
     
     -- Controls

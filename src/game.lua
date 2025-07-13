@@ -19,6 +19,9 @@ local ShipCreation = require('src.ship_creation')
 local NetworkClient = require('src.mock_network')
 local PlayerManager = require('src.player_manager')
 local Nexus = require('src.nexus')
+local ShipClassManager = require('src.ship_class_manager')
+local AbilitySystem = require('src.ability_system')
+local ManaSystem = require('src.mana_system')
 
 local Game = {}
 
@@ -56,6 +59,11 @@ function Game:init()
     -- Nexus hub world
     self.nexus = nil
     
+    -- Ship class manager
+    self.shipClassManager = ShipClassManager:new()
+    self.abilitySystem = AbilitySystem:new()
+    self.manaSystem = ManaSystem:new()
+    
     print("Sci-Fi Bullet Hell Game Initialized!")
 end
 
@@ -80,6 +88,14 @@ function Game:startGame(ship)
         self.player.credits = ship.credits or 1000
         self.player.experience = ship.experience or 0
         self.player.experienceToNext = ship.experienceToNext or 100
+        
+        -- Apply ship class if available
+        if ship.classType then
+            self.shipClassManager:applyClassToPlayer(self.player, ship.classType)
+            -- Initialize ability and mana systems for the player
+            self.abilitySystem:initializePlayer(self.player)
+            self.manaSystem:initializePlayer(self.player)
+        end
         
         -- Apply ship appearance
         self.player.shipShape = ship.shape or "triangle"
@@ -488,6 +504,19 @@ function Game:update(dt)
     else
         self.player:update(dt)
     end
+    
+    -- Update ship class effects
+    if self.shipClassManager then
+        self.shipClassManager:updatePlayer(self.player, dt)
+    end
+    
+    -- Update ability and mana systems
+    if self.abilitySystem then
+        self.abilitySystem:update(dt)
+    end
+    if self.manaSystem then
+        self.manaSystem:updatePlayer(self.player, dt)
+    end
     self.bulletManager:update(dt, self.player)
     self.enemyManager:update(dt, self.player, self.bulletManager)
     self.particleManager:update(dt)
@@ -697,6 +726,11 @@ function Game:draw()
         self.player:draw()
     end
     
+    -- Draw ship class effects
+    if self.shipClassManager then
+        self.shipClassManager:drawClassEffects(self.player)
+    end
+    
     self.bulletManager:draw()
     self.enemyManager:draw()
     self.particleManager:draw()
@@ -796,9 +830,25 @@ function Game:drawUI()
     love.graphics.setColor(self.audioManager.sfxEnabled and {0, 1, 0} or {0.5, 0.5, 0.5})
     love.graphics.print("SFX: " .. (self.audioManager.sfxEnabled and "ON" or "OFF"), 10, 180, 0, 1, 1)
     
+    -- Ship class UI
+    if self.shipClassManager then
+        self.shipClassManager:drawClassUI(self.player, self.width - 300, 280)
+    end
+    
+    -- Mana bar
+    if self.manaSystem and self.player.mana then
+        self.manaSystem:drawManaBar(self.player, 10, 50, 200, 12)
+        self.manaSystem:drawManaEffects(self.player)
+    end
+    
+    -- Ability UI
+    if self.abilitySystem then
+        self.abilitySystem:drawAbilityUI(self.player, 10, self.height - 60)
+    end
+    
     -- Controls help
     love.graphics.setColor(0.7, 0.7, 0.7)
-    love.graphics.print("CONTROLS: [I] Inventory  [TAB] Settings  [F] Dock", 10, self.height - 40, 0, 0.9, 0.9)
+    love.graphics.print("CONTROLS: [I] Inventory  [TAB] Settings  [F] Dock  [1-4] Class Abilities", 10, self.height - 40, 0, 0.9, 0.9)
     love.graphics.print("WASD Move  QE Rotate  [G] Auto-shoot  [P] Pause", 10, self.height - 25, 0, 0.9, 0.9)
     
     -- Health bar
@@ -934,6 +984,26 @@ function Game:keypressed(key)
             self.player.rotation = 0
             print("Player rotation reset")
         end
+    elseif key == '1' or key == '2' or key == '3' or key == '4' then
+        -- Use class abilities
+        local abilityIndex = tonumber(key)
+        if self.abilitySystem then
+            local success = self.abilitySystem:useAbility(self.player, abilityIndex)
+            if not success then
+                local abilityInfo = self.abilitySystem:getAbilityInfo(self.player, abilityIndex)
+                if abilityInfo then
+                    if not abilityInfo.canUse then
+                        if abilityInfo.cooldownRemaining > 0 then
+                            print("Ability on cooldown: " .. string.format("%.1f", abilityInfo.cooldownRemaining) .. "s")
+                        elseif self.player.mana < abilityInfo.manaCost then
+                            print("Not enough mana: " .. abilityInfo.manaCost .. " required")
+                        end
+                    end
+                else
+                    print("No ability in slot " .. abilityIndex)
+                end
+            end
+        end
     end
 end
 
@@ -1029,6 +1099,11 @@ function Game:drawNexus()
         self.playerManager:drawAll()
     else
         self.player:draw()
+    end
+    
+    -- Draw ship class effects
+    if self.shipClassManager then
+        self.shipClassManager:drawClassEffects(self.player)
     end
     
     -- Draw particles

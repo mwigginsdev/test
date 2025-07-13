@@ -6,6 +6,7 @@ Player.__index = Player
 function Player:new(x, y)
     local player = setmetatable({}, Player)
     
+    player.id = tostring(love.timer.getTime()) .. "_" .. math.random(1000, 9999)
     player.x = x
     player.y = y
     player.radius = 15
